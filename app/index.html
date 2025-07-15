@@ -1,64 +1,54 @@
-<html lang="en">
-  <head>
-    <script defer src="/dist/lzc-file-pickers.umd.js"></script>
-  </head>
-  <body>
-    <button type="button" id="open">打开文件选择器</button>
-    <lzc-file-picker
-      id="dev"
-      type="saveAs"
-      write-file-content
-      title="保存文件"
-      breadcrumb-root-title="根目录"
-    ></lzc-file-picker>
-  </body>
-  <script>
-    window.addEventListener("DOMContentLoaded", (event) => {
-      const $0 = document.getElementById("dev")
-      const button = document.querySelector("button")
-      function setState(value) {
-        $0._instance.exposed[value ? "open" : "close"]()
-      }
-      function dataTransfer(raw) {
-        if (!raw) return
-        const output = raw.detail[0]
-        return output
-      }
-      const disk = `/api/files/home`
-      // const disk = `/_lzc/files/home`
-      let isInit = false
-      button.addEventListener("click", () => {
-        const ctx = $0._instance.exposed
-        // 未初始化之后可记忆之前的路径
-        if (!isInit) {
-          ctx.init(disk)
-          isInit = true
-        }
-        // 如果 `type=saveAs` 并启用 `writeFileContent` 参数则需要使用 `sendSaveAsData` 将保存内容传递过去
-        // 参数以此是: 内容, 后缀名, 默认文件名
-        // 具体请看 `./dts/types.d.ts` 类型定义
-        ctx.sendSaveAsData("我是内容", "txt", "2023年6月8日")
-        ctx.open()
-      })
-      $0.addEventListener("visible", () => {
-        const next = confirm("你确定关闭吗?")
-        if (next) setState(false)
-      })
-      // type="file | dir" 触发
-      $0.addEventListener("submit", (raw) => {
-        const selected = dataTransfer(raw)
-        console.log({ selected })
-        setState(false)
-      })
-      // type="saveAs"
-      $0.addEventListener("done", (raw) => {
-        const selected = dataTransfer(raw)
-        const { status, stat } = selected
-        status.then((flag) => {
-          console.log(`执行${flag ? "成功" : "失败"}`)
-        })
-        setState(false)
-      })
-    })
-  </script>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>喵妙框</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="top-nav">
+        <button id="step-image" class="active">1. 图片</button>
+        <button id="step-frame">2. 边框</button>
+        <button id="step-decoration">3. 装饰</button>
+        <button id="step-save">4. 保存</button>
+    </header>
+
+    <main class="editor-area">
+        <div id="image-selection-view">
+            <h3>选择图片</h3>
+            <!-- 懒猫网盘文件选择器按钮 -->
+            <button id="select-from-drive">从懒猫网盘选择</button>
+            <button id="upload-local">本地上传</button>
+            <button id="save-to-drive" style="display: none;">保存到网盘</button>
+        </div>
+        <canvas id="main-canvas" style="display: none;"></canvas>
+    </main>
+
+    <footer class="material-bar">
+        <!-- 素材将通过JS动态加载到这里 -->
+    </footer>
+
+    <!-- 懒猫文件选择器组件 -->
+    <lzc-file-picker 
+        id="file-picker" 
+        type="file" 
+        title="选择图片文件" 
+        accept="image/*"
+        confirm-button-title="选择此文件">
+    </lzc-file-picker>
+
+    <!-- 懒猫文件保存器组件 -->
+    <lzc-file-picker 
+        id="file-saver" 
+        type="saveAs" 
+        write-file-content
+        title="保存图片" 
+        breadcrumb-root-title="我的网盘">
+    </lzc-file-picker>
+
+    <!-- 引入懒猫官方文件选择器插件 -->
+    <script defer src="https://unpkg.com/@lazycatcloud/lzc-file-pickers@latest/dist/lzc-file-pickers.umd.js"></script>
+    <script src="script.js"></script>
+</body>
 </html>

@@ -38,6 +38,13 @@ app.get('/api/materials/:type', (req, res) => {
 // TODO: 实现文件上传接口
 // app.post('/api/upload/:type', ...)
 
+// 添加网盘文件代理接口
+app.get('/api/files/*', (req, res) => {
+    // 这里需要根据懒猫网盘的实际API实现文件访问代理
+    // 暂时返回模拟数据
+    res.json({ message: '网盘API代理接口' });
+});
+
 app.listen(PORT, () => {
     console.log(`Backend server for catxframeup listening on port ${PORT}`);
 });
