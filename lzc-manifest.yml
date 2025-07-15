@@ -1,0 +1,19 @@
+name: 喵妙框
+package: cloud.lazycat.app.catxframeup
+version: 0.0.1
+description:
+license: https://choosealicense.com/licenses/mit/
+homepage:
+author:
+application:
+  subdomain: catxframeup
+  routes:
+    - /=file:/lzcapp/pkg/content/
+    - /=exec://3000,./lzcapp/pkg/content/backend/run.sh
+  #   - /open/=./lzcapp/pkg/content/open
+  # file_handler:
+  #   mime:
+  #     - audio/mpeg
+  #     - audio/mp3
+  #   actions:
+  #     open: /open?file=%u
