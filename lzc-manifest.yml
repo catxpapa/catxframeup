@@ -9,7 +9,7 @@ application:
   subdomain: catxframeup
   routes:
     - /=file:/lzcapp/pkg/content/
-    - /=exec://3000,./lzcapp/pkg/content/backend/run.sh
+    - /api/=exec://3000,./lzcapp/pkg/content/backend/run.sh
   #   - /open/=./lzcapp/pkg/content/open
   # file_handler:
   #   mime:
