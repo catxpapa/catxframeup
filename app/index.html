@@ -1,54 +1,149 @@
+<!-- catxframeup/app/index.html -->
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>喵妙框</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <header class="top-nav">
-        <button id="step-image" class="active">1. 图片</button>
-        <button id="step-frame">2. 边框</button>
-        <button id="step-decoration">3. 装饰</button>
-        <button id="step-save">4. 保存</button>
-    </header>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- 1. 顶部导航栏 -->
+      <header class="top-nav">
+        <img src="assets/logo.png" alt="喵妙框 Logo" class="logo" />
+        <nav>
+          <button id="nav-image" class="nav-button active" data-mode="image">
+            1. 图片
+          </button>
+          <button id="nav-frame" class="nav-button" data-mode="frame">
+            2. 边框
+          </button>
+          <button id="nav-decoration" class="nav-button" data-mode="decoration">
+            3. 装饰
+          </button>
+          <button id="nav-save" class="nav-button" data-mode="save">
+            4. 导出
+          </button>
+        </nav>
+      </header>
 
-    <main class="editor-area">
-        <div id="image-selection-view">
-            <h3>选择图片</h3>
-            <!-- 懒猫网盘文件选择器按钮 -->
-            <button id="select-from-drive">从懒猫网盘选择</button>
-            <button id="upload-local">本地上传</button>
-            <button id="save-to-drive" style="display: none;">保存到网盘</button>
+      <!-- 2. 中央编辑/预览区 -->
+      <main class="main-editor">
+        <!-- 图片模式 -->
+        <div id="editor-image" class="editor-view active">
+          <div class="placeholder-image">
+            <div class="upload-instructions">
+              <span class="upload-hint">将文件拖拽到此处，或</span>
+              <div class="upload-buttons-container">
+                <button class="upload-button">从本地上传</button>
+                <button class="upload-button online-upload">从网盘选择</button>
+              </div>
+            </div>
+          </div>
         </div>
-        <canvas id="main-canvas" style="display: none;"></canvas>
-    </main>
+        <!-- 边框模式 -->
+        <div id="editor-frame" class="editor-view">
+          <div class="image-display-wrapper">
+            <img
+              src="assets/testimg.png"
+              alt="编辑区图片"
+              class="editing-image"
+            />
+            <div class="border-overlay"></div>
+          </div>
+          <!-- 新增：边框参数控制 -->
+          <div class="editor-controls">
+            <label for="border-width-slider">边框宽度:</label>
+            <input
+              type="range"
+              id="border-width-slider"
+              min="1"
+              max="25"
+              value="10"
+              step="0.5"
+            />
+            <span id="border-width-label">10%</span>
+          </div>
+        </div>
+        <!-- 装饰模式 -->
+        <div id="editor-decoration" class="editor-view">
+          <div class="decoration-wrapper">
+            <img
+              src="assets/testimg.png"
+              alt="编辑区图片"
+              class="editing-image"
+            />
+            <div
+              class="placeholder-deco"
+              style="top: 20%; left: 30%; width: 50px; height: 50px"
+            ></div>
+            <div
+              class="placeholder-deco"
+              style="
+                top: 60%;
+                left: 60%;
+                width: 60px;
+                height: 40px;
+                transform: rotate(15deg);
+              "
+            ></div>
+          </div>
+        </div>
+        <!-- 保存模式 -->
+        <div id="editor-save" class="editor-view">
+          <div id="save-preview-container"></div>
 
-    <footer class="material-bar">
-        <!-- 素材将通过JS动态加载到这里 -->
-    </footer>
+          <div class="save-options">
+            <button>保存到网盘</button>
+            <button>下载到本地</button>
+            <!-- 更新：为按钮添加ID -->
+            <button id="copy-to-clipboard-btn">复制到剪贴板</button>
+          </div>
+        </div>
+      </main>
 
-    <!-- 懒猫文件选择器组件 -->
-    <lzc-file-picker 
-        id="file-picker" 
-        type="file" 
-        title="选择图片文件" 
-        accept="image/*"
-        confirm-button-title="选择此文件">
-    </lzc-file-picker>
-
-    <!-- 懒猫文件保存器组件 -->
-    <lzc-file-picker 
-        id="file-saver" 
-        type="saveAs" 
-        write-file-content
-        title="保存图片" 
-        breadcrumb-root-title="我的网盘">
-    </lzc-file-picker>
-
-    <!-- 引入懒猫官方文件选择器插件 -->
-    <script defer src="lzc-file-pickers.umd.js"></script>
+      <!-- 3. 底部素材栏 -->
+      <footer class="bottom-assets">
+        <!-- 图片素材 -->
+        <div id="assets-image" class="assets-view active">
+          <div class="asset-item">
+            <img src="assets/testimg.png" alt="历史图片" />
+          </div>
+          <div class="asset-item">
+            <img src="assets/testimg.png" alt="历史图片" />
+          </div>
+        </div>
+        <!-- 边框素材 -->
+        <div id="assets-frame" class="assets-view">
+          <!-- 更新：使用新的文件路径结构 -->
+          <div class="asset-item frame-asset-item" data-border-id="0">
+            <img src="assets/frames/0/frame.png" alt="边框样式1" />
+          </div>
+          <div class="asset-item frame-asset-item" data-border-id="1">
+            <img src="assets/frames/1/frame.png" alt="边框样式2" />
+          </div>
+          <div class="asset-item frame-asset-item" data-border-id="2">
+            <img src="assets/frames/2/frame.png" alt="边框样式3" />
+          </div>
+        </div>
+        <!-- 装饰素材 -->
+        <div id="assets-decoration" class="assets-view">
+          <div class="asset-item deco-asset">▲</div>
+          <div class="asset-item deco-asset">★</div>
+          <div class="asset-item deco-asset">❤</div>
+        </div>
+        <!-- 保存/历史作品 -->
+        <div id="assets-save" class="assets-view">
+          <div class="asset-item">
+            <img src="assets/testimg.png" alt="历史作品" />
+          </div>
+          <div class="asset-item">
+            <img src="assets/testimg.png" alt="历史作品" />
+          </div>
+        </div>
+      </footer>
+    </div>
     <script src="script.js"></script>
-</body>
+  </body>
 </html>

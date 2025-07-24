@@ -7,9 +7,9 @@ homepage:
 author:
 application:
   subdomain: catxframeup
+  workdir: /lzcapp/pkg/content/
   routes:
-    - /=file:/lzcapp/pkg/content/
-    - /api/=exec://3000,./lzcapp/pkg/content/backend/run.sh
+    - /=file:///lzcapp/pkg/content/
   #   - /open/=./lzcapp/pkg/content/open
   # file_handler:
   #   mime:
