@@ -70,6 +70,7 @@ html {
   justify-content: center;
   align-items: center;
   padding: 20px;
+  padding-bottom: 70px; /* 在底部留出足够空间给滑动条 */
   overflow: hidden;
 }
 .editor-view {
@@ -83,6 +84,7 @@ html {
 .editor-view.active {
   display: flex;
 }
+
 .placeholder-image {
   width: 80%;
   height: 80%;
@@ -100,7 +102,10 @@ html {
 }
 .image-display-wrapper {
   position: relative;
-  display: inline-block;
+  display: flex; /* 使用flex来居中图片 */
+  justify-content: center;
+  align-items: center;
+  overflow: hidden; /* 防止内容溢出 */
   transition: all 0.2s ease;
   box-sizing: border-box;
 }
@@ -133,14 +138,24 @@ html {
 
 /* 新增：编辑器控件样式 */
 .editor-controls {
-  display: flex;
+  position: absolute; /* 改为绝对定位 */
+  bottom: 15px; /* 定位到父容器底部 */
+  left: 50%; /* 水平居中 */
+  transform: translateX(-50%); /* 水平居中 */
+  z-index: 10; /* 确保在最上层 */
+  display: none;
   align-items: center;
   gap: 10px;
-  margin-top: 20px;
+  margin-top: 0px;
   padding: 10px;
-  background-color: var(--bg-color);
+  background-color: rgba(40, 40, 40, 0.8); /* 半透明背景，更有质感 */
+  backdrop-filter: blur(5px); /* 毛玻璃效果 */
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+/* 新增一个 .visible 类，用于JS切换显示 */
+.editor-controls.visible {
+  display: flex;
 }
 .editor-controls label {
   font-size: 14px;

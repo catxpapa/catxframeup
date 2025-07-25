@@ -1,21 +1,55 @@
 // catxframeup/app/script.js
 document.addEventListener('DOMContentLoaded', function() {
+    // --- 全局状态 ---
+    let currentBorderWidthRatio = 0.1; // 默认边框宽度为图片最小边的10%
+    let activeBorderId = null;
+    let activeBorderSettings = null;
+
+    // --- DOM 元素获取 ---
     const navButtons = document.querySelectorAll('.nav-button');
     const editorViews = document.querySelectorAll('.editor-view');
     const assetsViews = document.querySelectorAll('.assets-view');
     const uploadPlaceholder = document.querySelector('.placeholder-image');
+
+    const imageWrapper = document.querySelector('#editor-frame .image-display-wrapper');
+    const editingImage = imageWrapper ? imageWrapper.querySelector('.editing-image') : null;
+    const borderOverlay = imageWrapper ? imageWrapper.querySelector('.border-overlay') : null;
+    
+    const editorControls = document.querySelector('.editor-controls');
+    const borderWidthSlider = document.getElementById('border-width-slider');
+    const borderWidthLabel = document.getElementById('border-width-label');
 
     // --- 模式切换功能 ---
     navButtons.forEach(button => {
         button.addEventListener('click', () => {
             const mode = button.dataset.mode;
 
+            // 控制滑块区域的可见性
+            if (editorControls) {
+                if (mode === 'frame') {
+                    editorControls.classList.add('visible');
+                } else {
+                    editorControls.classList.remove('visible');
+                }
+            }
+
+            // 当切换到“保存”模式时，生成预览
             if (mode === 'save') {
-                const originalWrapper = document.querySelector('#editor-frame .image-display-wrapper');
                 const previewContainer = document.getElementById('save-preview-container');
-                if (originalWrapper && previewContainer) {
-                    previewContainer.innerHTML = '';
-                    const previewClone = originalWrapper.cloneNode(true);
+                if (imageWrapper && previewContainer) {
+                    previewContainer.innerHTML = ''; // 清空旧预览
+                    const previewClone = imageWrapper.cloneNode(true);
+                    
+                    const originalOverlay = imageWrapper.querySelector('.border-overlay');
+                    const cloneOverlay = previewClone.querySelector('.border-overlay');
+                    if(originalOverlay && cloneOverlay) {
+                        cloneOverlay.style.cssText = originalOverlay.style.cssText;
+                    }
+                    const originalImg = imageWrapper.querySelector('.editing-image');
+                    const cloneImg = previewClone.querySelector('.editing-image');
+                     if(originalImg && cloneImg) {
+                        cloneImg.style.cssText = originalImg.style.cssText;
+                    }
                     previewContainer.appendChild(previewClone);
                 }
             }
@@ -39,17 +73,14 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // --- 拖放上传功能 ---
+    // --- 拖放上传功能 (占位) ---
     window.addEventListener('dragover', e => e.preventDefault(), false);
     window.addEventListener('drop', e => e.preventDefault(), false);
-    if (uploadPlaceholder) { /* ... */ }
+    if (uploadPlaceholder) { 
+        // 拖放逻辑可以添加在这里
+    }
 
-    // --- 边框切换功能 ---
-    const frameAssetItems = document.querySelectorAll('.frame-asset-item');
-    const imageWrapper = document.querySelector('.image-display-wrapper');
-    const editingImage = imageWrapper ? imageWrapper.querySelector('.editing-image') : null;
-    const borderOverlay = imageWrapper ? imageWrapper.querySelector('.border-overlay') : null;
-
+    // --- 辅助函数 ---
     const parseCssValue = (valueStr) => {
         const values = String(valueStr).trim().split(/\s+/).map(v => parseFloat(v) || 0);
         if (values.length === 1) return [values[0], values[0], values[0], values[0]];
@@ -58,50 +89,85 @@ document.addEventListener('DOMContentLoaded', function() {
         return values.slice(0, 4);
     };
 
-    frameAssetItems.forEach(item => {
-        item.addEventListener('click', async () => {
-            if (!editingImage || !borderOverlay) return;
-            const borderId = item.dataset.borderId;
-            const settingsPath = `assets/frames/${borderId}/setting.json`;
-            try {
-                const response = await fetch(settingsPath);
-                if (!response.ok) throw new Error(`无法加载边框配置: ${settingsPath}`);
-                const settings = await response.json();
-                frameAssetItems.forEach(i => i.classList.remove('active-asset'));
-                item.classList.add('active-asset');
-                const borderSrc = `assets/frames/${borderId}/${settings.source || 'frame.png'}`;
-                borderOverlay.style.borderStyle = 'solid';
-                borderOverlay.style.borderWidth = settings.width || '0px';
-                borderOverlay.style.borderImageSource = `url(${borderSrc})`;
-                borderOverlay.style.borderImageSlice = settings.slice || '0';
-                borderOverlay.style.borderImageRepeat = settings.repeat || 'stretch';
-                const borderWidths = parseCssValue(settings.width || '0px');
-                const outsets = parseCssValue(settings.outset || '0px');
-                const paddings = borderWidths.map((width, i) => {
-                    const paddingValue = width - outsets[i];
-                    return paddingValue > 0 ? `${paddingValue}px` : '0px';
-                });
-                editingImage.style.padding = paddings.join(' ');
-            } catch (error) {
-                console.error('应用边框失败:', error);
+    /**
+     * 应用边框样式到预览区
+     */
+    async function applyBorderStyles() {
+        if (!activeBorderId || !editingImage || !borderOverlay || !editingImage.complete) return;
+
+        try {
+            if (!activeBorderSettings) {
+                const response = await fetch(`assets/frames/${activeBorderId}/setting.json`);
+                if (!response.ok) throw new Error(`无法加载配置`);
+                activeBorderSettings = await response.json();
             }
+            
+            const baseWidths = parseCssValue(activeBorderSettings.width || '40');
+            const baseOutsets = parseCssValue(activeBorderSettings.outset || '0');
+            const maxBaseWidth = Math.max(...baseWidths, 1); // 使用Math.max确保不为0
+
+            const previewRefDim = Math.min(editingImage.clientWidth, editingImage.clientHeight);
+            const baseThicknessPx = previewRefDim * currentBorderWidthRatio;
+
+            const finalWidths = baseWidths.map(bw => baseThicknessPx * (bw / maxBaseWidth));
+            const finalOutsets = baseOutsets.map((bo, i) => finalWidths[i] * (baseWidths[i] > 0 ? bo / baseWidths[i] : 0));
+            const finalPaddings = finalWidths.map((fw, i) => fw - finalOutsets[i]);
+
+            borderOverlay.style.borderWidth = finalWidths.map(w => `${w}px`).join(' ');
+            editingImage.style.padding = finalPaddings.map(p => `${p > 0 ? p : 0}px`).join(' ');
+            
+            const borderSrc = `assets/frames/${activeBorderId}/${activeBorderSettings.source || 'frame.png'}`;
+            borderOverlay.style.borderStyle = 'solid';
+            borderOverlay.style.borderImageSource = `url(${borderSrc})`;
+            borderOverlay.style.borderImageSlice = activeBorderSettings.slice || '0';
+            borderOverlay.style.borderImageRepeat = activeBorderSettings.repeat || 'stretch';
+
+        } catch (error) {
+            console.error('应用预览边框失败:', error);
+        }
+    }
+
+    // --- 事件监听 ---
+    document.querySelectorAll('.frame-asset-item').forEach(item => {
+        item.addEventListener('click', async () => {
+            document.querySelectorAll('.frame-asset-item').forEach(i => i.classList.remove('active-asset'));
+            item.classList.add('active-asset');
+            activeBorderId = item.dataset.borderId;
+            activeBorderSettings = null;
+            await applyBorderStyles();
         });
     });
 
+    if (borderWidthSlider) {
+        borderWidthSlider.addEventListener('input', () => {
+            currentBorderWidthRatio = parseFloat(borderWidthSlider.value) / 100;
+            borderWidthLabel.textContent = `${borderWidthSlider.value}%`;
+            applyBorderStyles();
+        });
+    }
+    
+    if(editingImage) {
+        editingImage.onload = () => {
+            const firstFrame = document.querySelector('.frame-asset-item');
+            if(firstFrame && !activeBorderId) {
+                firstFrame.click();
+            } else {
+                applyBorderStyles();
+            }
+        };
+        if(editingImage.complete) editingImage.onload();
+    }
+    window.addEventListener('resize', applyBorderStyles);
+
     // --- 导出功能 ---
-
-    /**
-     * 在Canvas上绘制九宫格边框（不含中心）
-     */
-    function drawBorderImage(ctx, borderImg, settings, canvasWidth, canvasHeight) {
+    function drawBorderImage(ctx, borderImg, settings, canvasWidth, canvasHeight, targetBorderWidths) {
         const slice = parseCssValue(settings.slice);
-        const width = parseCssValue(settings.width);
-
-        const [sTop, sRight, sBottom, sLeft] = slice;
-        const [dTop, dRight, dBottom, dLeft] = width;
+        const [dTop, dRight, dBottom, dLeft] = targetBorderWidths;
 
         const iw = borderImg.width;
         const ih = borderImg.height;
+
+        const [sTop, sRight, sBottom, sLeft] = parseCssValue(settings.slice);
 
         const sx = [0, sLeft, iw - sRight, iw];
         const sy = [0, sTop, ih - sBottom, ih];
@@ -110,9 +176,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         for (let row = 0; row < 3; row++) {
             for (let col = 0; col < 3; col++) {
-                if (row === 1 && col === 1) {
-                    continue; // 跳过中心区域
-                }
+                if (row === 1 && col === 1) continue;
                 if (sx[col] >= sx[col + 1] || sy[row] >= sy[row + 1]) continue;
                 
                 ctx.drawImage(
@@ -127,21 +191,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const copyBtn = document.getElementById('copy-to-clipboard-btn');
     if (copyBtn) {
         copyBtn.addEventListener('click', async () => {
-            const activeFrame = document.querySelector('.frame-asset-item.active-asset');
-            const mainImageEl = document.querySelector('#editor-frame .editing-image');
-
-            if (!mainImageEl || !activeFrame) {
+            if (!editingImage || !activeBorderId || !activeBorderSettings) {
                 alert('请先选择一张图片和一个边框样式。');
                 return;
             }
 
-            const borderId = activeFrame.dataset.borderId;
-            const settingsPath = `assets/frames/${borderId}/setting.json`;
-
             try {
-                const settingsRes = await fetch(settingsPath);
-                const settings = await settingsRes.json();
-
                 const mainImage = new Image();
                 const borderImage = new Image();
                 mainImage.crossOrigin = "Anonymous";
@@ -151,12 +206,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     new Promise((resolve, reject) => {
                         mainImage.onload = resolve;
                         mainImage.onerror = reject;
-                        mainImage.src = mainImageEl.src;
+                        mainImage.src = editingImage.src;
                     }),
                     new Promise((resolve, reject) => {
                         borderImage.onload = resolve;
                         borderImage.onerror = reject;
-                        borderImage.src = `assets/frames/${borderId}/${settings.source || 'frame.png'}`;
+                        borderImage.src = `assets/frames/${activeBorderId}/${activeBorderSettings.source || 'frame.png'}`;
                     })
                 ]);
 
@@ -165,16 +220,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 canvas.height = mainImage.naturalHeight;
                 const ctx = canvas.getContext('2d');
 
-                // 1. 计算图片需要内缩的距离
-                const borderWidths = parseCssValue(settings.width || '0px');
-                const outsets = parseCssValue(settings.outset || '0px');
-                const paddings = borderWidths.map((w, i) => {
-                    const paddingValue = w - outsets[i];
-                    return paddingValue > 0 ? paddingValue : 0;
-                });
-                const [pTop, pRight, pBottom, pLeft] = paddings;
+                const baseWidths = parseCssValue(activeBorderSettings.width || '40');
+                const baseOutsets = parseCssValue(activeBorderSettings.outset || '0');
+                const maxBaseWidth = Math.max(...baseWidths, 1);
 
-                // 2. 先绘制被“内缩”的主图片
+                const imageRefDim = Math.min(canvas.width, canvas.height);
+                const baseThicknessPx = imageRefDim * currentBorderWidthRatio;
+
+                const finalCanvasWidths = baseWidths.map(bw => baseThicknessPx * (bw / maxBaseWidth));
+                const finalCanvasOutsets = baseOutsets.map((bo, i) => finalCanvasWidths[i] * (baseWidths[i] > 0 ? bo / baseWidths[i] : 0));
+                const finalCanvasPaddings = finalCanvasWidths.map((fw, i) => fw - finalCanvasOutsets[i]);
+                
+                const [pTop, pRight, pBottom, pLeft] = finalCanvasPaddings.map(p => p > 0 ? p : 0);
+
                 ctx.drawImage(
                     mainImage,
                     pLeft, 
@@ -183,8 +241,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     canvas.height - pTop - pBottom
                 );
 
-                // 3. 再将边框作为“画框”绘制在图片上层
-                drawBorderImage(ctx, borderImage, settings, canvas.width, canvas.height);
+                drawBorderImage(ctx, borderImage, activeBorderSettings, canvas.width, canvas.height, finalCanvasWidths);
 
                 canvas.toBlob(async (blob) => {
                     if (!blob) {
