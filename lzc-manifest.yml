@@ -1,12 +1,12 @@
-name: 喵妙框
-package: cloud.lazycat.app.catxframeup
-version: 0.0.1
+name: 喵框
+package: cloud.lazycat.app.frameup
+version: 0.2.1
 description:
 license: https://choosealicense.com/licenses/mit/
 homepage:
 author:
 application:
-  subdomain: catxframeup
+  subdomain: frameup
   workdir: /lzcapp/pkg/content/
   routes:
     - /=file:///lzcapp/pkg/content/
