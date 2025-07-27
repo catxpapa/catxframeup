@@ -1,4 +1,3 @@
-<!-- catxframeup/app/index.html -->
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
@@ -28,69 +27,32 @@
         </nav>
       </header>
 
-      <!-- 2. 中央编辑/预览区 -->
+      <!-- 2. 统一Canvas编辑区 -->
       <main class="main-editor">
-        <!-- 图片模式 -->
-        <div id="editor-image" class="editor-view active">
-          <div class="placeholder-image">
-            <div class="upload-instructions">
-              <span class="upload-hint">将文件拖拽到此处，或</span>
-              <div class="upload-buttons-container">
-                <button class="upload-button">从本地上传</button>
-                <button class="upload-button online-upload">从网盘选择</button>
-              </div>
+        <!-- 图片上传占位符 -->
+        <div id="upload-placeholder" class="placeholder- class="upload-hint">将文件拖拽到此处，或</span>
+            <div class="upload-buttons-container">
+              <button class="upload-button">从本地上传</button>
+              <button class="upload-button online-upload">从网盘选择</button>
             </div>
           </div>
         </div>
-        <!-- 边框模式 -->
-        <div id="editor-frame" class="editor-view">
-          <div class="image-display-wrapper">
-            <img
-              src="assets/testimg.png"
-              alt="编辑区图片"
-              class="editing-image"
-            />
-            <div class="border-overlay"></div>
-          </div>
-        </div>
-        <!-- 装饰模式 -->
-        <div id="editor-decoration" class="editor-view">
-          <div class="decoration-wrapper">
-            <img
-              src="assets/testimg.png"
-              alt="编辑区图片"
-              class="editing-image"
-            />
-            <div
-              class="placeholder-deco"
-              style="top: 20%; left: 30%; width: 50px; height: 50px"
-            ></div>
-            <div
-              class="placeholder-deco"
-              style="
-                top: 60%;
-                left: 60%;
-                width: 60px;
-                height: 40px;
-                transform: rotate(15deg);
-              "
-            ></div>
-          </div>
-        </div>
-        <!-- 保存模式 -->
-        <div id="editor-save" class="editor-view">
-          <div id="save-preview-container"></div>
 
-          <div class="save-options">
-            <button>保存到网盘</button>
-            <button>下载到本地</button>
-            <!-- 更新：为按钮添加ID -->
-            <button id="copy-to-clipboard-btn">复制到剪贴板</button>
+        <!-- Canvas编辑器容器 -->
+        <div id="canvas-editor-container" class="canvas-editor-container" style="display: none;">
+          <canvas id="main-canvas" class="main-canvas"></canvas>
+          <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
+          <div id="canvas-controls" class="canvas-controls">
+            <div class="control-handle top-left"></div>
+            <div class="control-handle top-right"></div>
+            <div class="control-handle bottom-left"></div>
+            <div class="control-handle bottom-right"></div>
+            <div class="control-handle rotate-handle"></div>
           </div>
         </div>
 
-        <!-- 新增：边框参数控制 -->
-        <div class="editor-controls">
+        <!-- 边框控件 -->
+        <div id="border-controls" class="editor-controls">
           <label for="border-width-slider">边框宽度:</label>
           <input
             type="range"
@@ -102,22 +64,55 @@
           />
           <span id="border-width-label">10%</span>
         </div>
+
+        <!-- 装饰控件 -->
+        <div id="decoration-controls" class="editor-controls">
+          <label for="decoration-scale-slider">装饰缩放:</label>
+          <input
+            type="range"
+            id="decoration-scale-slider"
+            min="0.1"
+            max="3"
+            value="1"
+            step="0.1"
+          />
+          <span id="decoration-scale-label">100%</span>
+          
+          <label for="decoration-rotation-slider">装饰旋转:</label>
+          <input
+            type="range"
+            id="decoration-rotation-slider"
+            min="0"
+            max="360"
+            value="0"
+            step="5"
+          />
+          <span id="decoration-rotation-label">0°</span>
+          
+          <button id="delete-decoration-btn" class="delete-btn">删除装饰</button>
+        </div>
+
+        <!-- 保存选项 -->
+        <div id="save-options" class="save-options">
+          <button>保存到网盘</button>
+          <button>下载到本地</button>
+          <button id="copy-to-clipboard-btn">复制到剪贴板</button>
+        </div>
       </main>
 
       <!-- 3. 底部素材栏 -->
       <footer class="bottom-assets">
         <!-- 图片素材 -->
         <div id="assets-image" class="assets-view active">
-          <div class="asset-item">
+          <div class="asset-item image-asset-item" data-image-src="assets/testimg.png">
             <img src="assets/testimg.png" alt="历史图片" />
           </div>
-          <div class="asset-item">
+          <div class="asset-item image-asset-item" data-image-src="assets/testimg.png">
             <img src="assets/testimg.png" alt="历史图片" />
           </div>
         </div>
         <!-- 边框素材 -->
         <div id="assets-frame" class="assets-view">
-          <!-- 更新：使用新的文件路径结构 -->
           <div class="asset-item frame-asset-item" data-border-id="0">
             <img src="assets/frames/0/frame.png" alt="边框样式1" />
           </div>
@@ -130,9 +125,15 @@
         </div>
         <!-- 装饰素材 -->
         <div id="assets-decoration" class="assets-view">
-          <div class="asset-item deco-asset">▲</div>
-          <div class="asset-item deco-asset">★</div>
-          <div class="asset-item deco-asset">❤</div>
+          <div class="asset-item decoration-asset-item" data-decoration-id="0">
+            <img src="assets/decos/0/deco.png" alt="装饰样式1" />
+          </div>
+          <div class="asset-item decoration-asset-item" data-decoration-id="1">
+            <img src="assets/decos/1/deco.png" alt="装饰样式2" />
+          </div>
+          <div class="asset-item decoration-asset-item" data-decoration-id="2">
+            <img src="assets/decos/2/deco.png" alt="装饰样式3" />
+          </div>
         </div>
         <!-- 保存/历史作品 -->
         <div id="assets-save" class="assets-view">

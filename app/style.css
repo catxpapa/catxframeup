@@ -1,7 +1,6 @@
-/* catxframeup/app/style.css */
 :root {
-  --primary-color: #00aabb; /* 主色调 */
-  --border-color: #ccc; /* 边框颜色 */
+  --primary-color: #00aabb;
+  --border-color: #ccc;
   --bg-color: #f8f9fa;
   --text-color: #333;
 }
@@ -34,16 +33,19 @@ html {
   border-bottom: 1px solid var(--border-color);
   padding: 5px 10px;
 }
+
 .logo {
   width: 60px;
   height: 60px;
   margin-right: 20px;
 }
+
 .top-nav nav {
   display: flex;
   flex-grow: 1;
   justify-content: flex-start;
 }
+
 .nav-button {
   padding: 15px 20px;
   border: none;
@@ -53,16 +55,18 @@ html {
   border-bottom: 3px solid transparent;
   transition: all 0.2s ease-in-out;
 }
+
 .nav-button:hover {
   background-color: var(--bg-color);
 }
+
 .nav-button.active {
   border-bottom-color: var(--primary-color);
   color: var(--primary-color);
   font-weight: bold;
 }
 
-/* 2. 中央编辑区 */
+/* 2. 统一编辑区 */
 .main-editor {
   flex-grow: 1;
   position: relative;
@@ -70,19 +74,8 @@ html {
   justify-content: center;
   align-items: center;
   padding: 20px;
-  padding-bottom: 70px; /* 在底部留出足够空间给滑动条 */
+  padding-bottom: 70px;
   overflow: hidden;
-}
-.editor-view {
-  display: none;
-  width: 100%;
-  height: 100%;
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
-}
-.editor-view.active {
-  display: flex;
 }
 
 .placeholder-image {
@@ -95,112 +88,202 @@ html {
   border-radius: 8px;
   transition: all 0.2s ease-in-out;
 }
+
 .placeholder-image.drag-over {
   border-color: var(--primary-color);
   background-color: rgba(0, 170, 187, 0.05);
   transform: scale(1.02);
 }
-.image-display-wrapper {
+
+/* Canvas编辑器容器 */
+.canvas-editor-container {
   position: relative;
-  display: flex; /* 使用flex来居中图片 */
+  width: 100%;
+  height: 100%;
+  display: flex;
   justify-content: center;
   align-items: center;
-  overflow: hidden; /* 防止内容溢出 */
-  transition: all 0.2s ease;
-  box-sizing: border-box;
-}
-.editing-image {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  box-sizing: border-box;
-  width: 100%;
-  height: 100%;
-  transition: padding 0.2s ease;
-  /* --- 更新：明确指定堆叠层级 --- */
-  position: relative; /* 成为堆叠上下文的一部分 */
-  z-index: 1; /* 放置在下层 */
-}
-.border-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  transition: all 0.2s ease;
-  box-sizing: border-box;
-  /* --- 更新：明确指定堆叠层级 --- */
-  z-index: 2; /* 放置在上层，覆盖图片 */
 }
 
-/* 新增：编辑器控件样式 */
+.main-canvas,
+.overlay-canvas {
+  position: absolute;
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.main-canvas {
+  z-index: 1;
+}
+
+.overlay-canvas {
+  z-index: 2;
+  pointer-events: auto;
+}
+
+/* Canvas控制器 */
+.canvas-controls {
+  position: absolute;
+  pointer-events: none;
+  z-index: 3;
+  display: none;
+}
+
+.canvas-controls.visible {
+  display: block;
+}
+
+.control-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--primary-color);
+  border: 2px solid white;
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+}
+
+.control-handle.top-left {
+  top: 0;
+  left: 0;
+  cursor: nw-resize;
+}
+
+.control-handle.top-right {
+  top: 0;
+  right: 0;
+  cursor: ne-resize;
+}
+
+.control-handle.bottom-left {
+  bottom: 0;
+  left: 0;
+  cursor: sw-resize;
+}
+
+.control-handle.bottom-right {
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+}
+
+.control-handle.rotate-handle {
+  top: -30px;
+  left: 50%;
+  cursor: grab;
+  background: #ff6b6b;
+}
+
+.control-handle.rotate-handle:active {
+  cursor: grabbing;
+}
+
+/* 编辑器控件样式 */
 .editor-controls {
-  position: absolute; /* 改为绝对定位 */
-  bottom: 15px; /* 定位到父容器底部 */
-  left: 50%; /* 水平居中 */
-  transform: translateX(-50%); /* 水平居中 */
-  z-index: 10; /* 确保在最上层 */
+  position: absolute;
+  bottom: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
   display: none;
   align-items: center;
-  gap: 10px;
-  margin-top: 0px;
-  padding: 10px;
-  background-color: rgba(40, 40, 40, 0.8); /* 半透明背景，更有质感 */
-  backdrop-filter: blur(5px); /* 毛玻璃效果 */
+  gap: 15px;
+  padding: 10px 15px;
+  background-color: rgba(40, 40, 40, 0.9);
+  backdrop-filter: blur(5px);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  color: white;
 }
-/* 新增一个 .visible 类，用于JS切换显示 */
+
 .editor-controls.visible {
   display: flex;
 }
+
 .editor-controls label {
   font-size: 14px;
+  white-space: nowrap;
 }
-#border-width-slider {
-  width: 150px;
+
+#border-width-slider,
+#decoration-scale-slider,
+#decoration-rotation-slider {
+  width: 120px;
   cursor: pointer;
 }
-#border-width-label {
+
+#border-width-label,
+#decoration-scale-label,
+#decoration-rotation-label {
   font-size: 14px;
   font-weight: bold;
   min-width: 40px;
-}
-.save-options {
-  margin-top: 20px;
-}
-.save-options button {
-  margin: 0 5px;
-  padding: 10px 15px;
-}
-.decoration-wrapper {
-  position: relative;
-}
-.placeholder-deco {
-  position: absolute;
-  border: 2px solid var(--primary-color);
-  background: rgba(0, 170, 187, 0.3);
-  cursor: move;
+  text-align: center;
 }
 
-/* --- 上传区域按钮样式 --- */
+.delete-btn {
+  padding: 5px 10px;
+  background: #ff4757;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.delete-btn:hover {
+  background: #ff3742;
+}
+
+.save-options {
+  position: absolute;
+  bottom: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: none;
+  gap: 10px;
+}
+
+.save-options.visible {
+  display: flex;
+}
+
+.save-options button {
+  padding: 10px 15px;
+  border: 1px solid var(--primary-color);
+  background-color: var(--primary-color);
+  color: white;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.save-options button:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+}
+
+/* 上传区域按钮样式 */
 .upload-instructions {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 20px;
 }
+
 .upload-hint {
   font-size: 16px;
   color: #888;
 }
+
 .upload-buttons-container {
   display: flex;
   gap: 15px;
 }
+
 .upload-button {
   padding: 12px 24px;
   font-size: 16px;
@@ -212,15 +295,18 @@ html {
   background-color: var(--primary-color);
   color: #fff;
 }
+
 .upload-button:hover {
   opacity: 0.9;
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
+
 .upload-button.online-upload {
   background-color: #fff;
   color: var(--primary-color);
 }
+
 .upload-button.online-upload:hover {
   background-color: rgba(0, 170, 187, 0.05);
   opacity: 1;
@@ -236,6 +322,7 @@ html {
   overflow-x: auto;
   overflow-y: hidden;
 }
+
 .assets-view {
   display: none;
   position: absolute;
@@ -248,9 +335,11 @@ html {
   box-sizing: border-box;
   gap: 15px;
 }
+
 .assets-view.active {
   display: flex;
 }
+
 .asset-item {
   width: 80px;
   height: 80px;
@@ -265,32 +354,19 @@ html {
   overflow: hidden;
   transition: all 0.2s ease;
 }
+
 .asset-item:hover {
   border-color: var(--primary-color);
 }
+
 .asset-item.active-asset {
   border-color: var(--primary-color);
   transform: scale(1.05);
   box-shadow: 0 0 8px rgba(0, 170, 187, 0.5);
 }
+
 .asset-item img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-.deco-asset {
-  font-size: 40px;
-  color: var(--primary-color);
-}
-
-/* 为保存预览容器添加样式 */
-#save-preview-container {
-  flex-grow: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  height: 100%;
-  padding: 20px;
-  box-sizing: border-box;
 }
