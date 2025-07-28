@@ -751,6 +751,22 @@ class CanvasEditor {
         
         return null;
     }
+
+     copyToClipboard() {
+        return new Promise((resolve, reject) => {
+            this.mainCanvas.toBlob(async (blob) => {
+                try {
+                    await navigator.clipboard.write([
+                        new ClipboardItem({ 'image/png': blob })
+                    ]);
+                    resolve();
+                } catch (error) {
+                    reject(error);
+                }
+            }, 'image/png');
+        });
+    }
+
 }
 
 // ===== 图片管理器 =====
@@ -965,6 +981,8 @@ class DecorationManager {
             });
         }
         
+
+
         // 监听状态变化以更新控件
         editorState.addListener(this.onStateChange.bind(this));
     }
@@ -1311,6 +1329,19 @@ document.addEventListener('DOMContentLoaded', function() {
     borderManager = new BorderManager();
     decorationManager = new DecorationManager();
     modeManager = new ModeManager();
+
+    const copyBtn = document.getElementById('copy-to-clipboard-btn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', async () => {
+                try {
+                    await canvasEditor.copyToClipboard();
+                    alert('已成功复制到剪贴板！');
+                } catch (error) {
+                    console.error('复制失败:', error);
+                    alert('复制失败，请重试。');
+                }
+            });
+        }
     
     console.log('🎉 喵妙框Canvas统一架构初始化完成');
     
@@ -1364,14 +1395,27 @@ function initUploadDialogs() {
 
 // 显示上传对话框
 function showUploadDialog(dialogId) {
+    hideAllUploadDialog()
     console.log("showUploadDialog",dialogId);
     document.getElementById(dialogId).style.display = 'flex';
+    document.getElementById("upload-dialogs").style.display = 'flex';
+
+
 }
 
 // 隐藏上传对话框
 function hideUploadDialog(dialogId) {
     console.log("hideUploadDialog",dialogId);
     document.getElementById(dialogId).style.display = 'none';
+    document.getElementById("upload-dialogs").style.display = 'none';
+}
+// 隐藏上传对话框
+function hideAllUploadDialog() {
+    console.log("hideAllUploadDialog");
+    document.getElementById('image-upload-dialog').style.display = 'none';
+    document.getElementById('frame-upload-dialog').style.display = 'none';
+    document.getElementById('decoration-upload-dialog').style.display = 'none';
+    document.getElementById("upload-dialogs").style.display = 'none';
 }
 
 // 设置对话框事件
