@@ -1099,11 +1099,209 @@ class ModeManager {
         }
     }
 }
+// = 后端API集成 =
+class BackendIntegration {
+    constructor() {
+        this.init();
+    }
+    
+    async init() {
+        // 初始化时加载素材
+        await this.loadAssets();
+        await this.loadUploads();
+        await this.loadHistory();
+    }
+    
+    // 加载素材
+    async loadAssets() {
+        try {
+            const [frames, decos] = await Promise.all([
+                apiClient.getAssets('frames'),
+                apiClient.getAssets('decos')
+            ]);
+            
+            this.updateFrameAssets(frames);
+            this.updateDecoAssets(decos);
+        } catch (error) {
+            console.error('加载素材失败:', error);
+        }
+    }
+    
+    // 更新边框素材显示
+    updateFrameAssets(frames) {
+        const container = document.getElementById('assets-frame');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        frames.forEach(frame => {
+            const assetItem = document.createElement('div');
+            assetItem.className = 'asset-item frame-asset-item';
+            assetItem.dataset.borderId = frame.id;
+            assetItem.innerHTML = `<img src="${frame.imagePath}" alt="${frame.name}" />`;
+            container.appendChild(assetItem);
+        });
+    }
+    
+    // 更新装饰素材显示
+    updateDecoAssets(decos) {
+        const container = document.getElementById('assets-decoration');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        decos.forEach(deco => {
+            const assetItem = document.createElement('div');
+            assetItem.className = 'asset-item decoration-asset-item';
+            assetItem.dataset.decorationId = deco.id;
+            assetItem.innerHTML = `<img src="${deco.imagePath}" alt="${deco.name}" />`;
+            container.appendChild(assetItem);
+        });
+    }
+    
+    // 加载上传的图片
+    async loadUploads() {
+        try {
+            const uploads = await apiClient.getUploadsList();
+            this.updateImageAssets(uploads);
+        } catch (error) {
+            console.error('加载上传图片失败:', error);
+        }
+    }
+    
+    // 更新图片素材显示
+    updateImageAssets(uploads) {
+        const container = document.getElementById('assets-image');
+        if (!container) return;
+        
+        // 保留现有的预设图片，添加上传的图片
+        uploads.forEach(upload => {
+            const assetItem = document.createElement('div');
+            assetItem.className = 'asset-item image-asset-item';
+            assetItem.dataset.imageSrc = upload.path;
+            assetItem.innerHTML = `<img src="${upload.thumbnailPath}" alt="${upload.filename}" />`;
+            container.appendChild(assetItem);
+        });
+    }
+    
+    // 加载历史作品
+    async loadHistory() {
+        try {
+            const history = await apiClient.getHistoryList();
+            this.updateHistoryAssets(history);
+        } catch (error) {
+            console.error('加载历史作品失败:', error);
+        }
+    }
+    
+    // 更新历史作品显示
+    updateHistoryAssets(history) {
+        const container = document.getElementById('assets-save');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        history.forEach(item => {
+            const assetItem = document.createElement('div');
+            assetItem.className = 'asset-item history-item';
+            assetItem.dataset.historyId = item.id;
+            assetItem.innerHTML = ` <img src="${item.thumbnailPath}" alt="${item.title}" /> <div class="history-title">${item.title}</div> `;
+            container.appendChild(assetItem);
+        });
+    }
+    
+    // 处理文件上传
+    async handleFileUpload(file, type = 'image') {
+        try {
+            let result;
+            if (type === 'image') {
+                result = await apiClient.uploadImage(file);
+            } else {
+                // 素材上传需要额外的设置参数
+                const settings = await this.promptForAssetSettings(type);
+                if (!settings) return null;
+                
+                result = await apiClient.uploadAsset(file, type, settings);
+            }
+            
+            // 刷新相应的素材列表
+            if (type === 'image') {
+                await this.loadUploads();
+            } else {
+                await this.loadAssets();
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('文件上传失败:', error);
+            alert(`上传失败: ${error.message}`);
+            return null;
+        }
+    }
+    
+    // 提示用户输入素材设置
+    async promptForAssetSettings(type) {
+        // 这里可以实现一个简单的设置输入界面
+        // 暂时使用prompt，后续可以改为可视化界面
+        const settingsStr = prompt(`请输入${type === 'frame' ? '边框' : '装饰'}的设置参数 (JSON格式):`);
+        if (!settingsStr) return null;
+        
+        try {
+            return JSON.parse(settingsStr);
+        } catch (e) {
+            alert('设置参数格式错误');
+            return null;
+        }
+    }
+    
+    // 保存当前作品
+    async saveCurrentWork(title) {
+        try {
+            // 获取当前Canvas内容
+            const canvas = canvasEditor.mainCanvas;
+            const imageData = canvas.toDataURL('image/png');
+            
+            // 获取当前项目数据
+            const projectData = editorState.getState();
+            
+            const result = await apiClient.saveHistory(imageData, projectData, title);
+            
+            // 刷新历史作品列表
+            await this.loadHistory();
+            
+            alert('作品保存成功！');
+            return result;
+        } catch (error) {
+            console.error('保存作品失败:', error);
+            alert(`保存失败: ${error.message}`);
+            return null;
+        }
+    }
+    
+    // 加载历史作品
+    async loadHistoryWork(historyId) {
+        try {
+            const projectData = await apiClient.getHistoryDetail(historyId);
+            
+            // 恢复项目状态
+            if (projectData.image && projectData.image.element) {
+                // 这里需要根据实际的数据结构来恢复状态
+                // 可能需要重新加载图片等
+            }
+            
+            alert('历史作品加载成功！');
+        } catch (error) {
+            console.error('加载历史作品失败:', error);
+            alert(`加载失败: ${error.message}`);
+        }
+    }
+}
 
+// 初始化后端集成
+let backendIntegration;
 // ===== 全局实例初始化 =====
 let editorState, canvasEditor, imageManager, borderManager, decorationManager, modeManager;
 
 document.addEventListener('DOMContentLoaded', function() {
+
+
     // 初始化全局状态
     editorState = new EditorState();
     
@@ -1124,4 +1322,360 @@ document.addEventListener('DOMContentLoaded', function() {
         disableDebug: () => editorState.disableDebug(),
         getDebugInfo: () => editorState.getDebugInfo()
     };
+
+    // 添加后端功能初始化
+    initBackendFeatures();
 });
+
+
+// 后端功能初始化
+function initBackendFeatures() {
+    // 初始化上传对话框事件
+    initUploadDialogs();
+    
+    // 初始化管理按钮事件
+    initManagementButtons();
+    
+    // 加载动态内容
+    loadDynamicContent();
+}
+
+// 初始化上传对话框
+function initUploadDialogs() {
+    console.log("initUploadDialogs")
+    // 图片上传
+    document.getElementById('upload-image-btn').addEventListener('click', () => {
+        showUploadDialog('image-upload-dialog');
+    });
+    
+    // 边框上传
+    document.getElementById('upload-frame-btn').addEventListener('click', () => {
+        showUploadDialog('frame-upload-dialog');
+    });
+    
+    // 装饰上传
+    document.getElementById('upload-decoration-btn').addEventListener('click', () => {
+        showUploadDialog('decoration-upload-dialog');
+    });
+    
+    // 对话框确认和取消事件
+    setupDialogEvents();
+}
+
+// 显示上传对话框
+function showUploadDialog(dialogId) {
+    console.log("showUploadDialog",dialogId);
+    document.getElementById(dialogId).style.display = 'flex';
+}
+
+// 隐藏上传对话框
+function hideUploadDialog(dialogId) {
+    console.log("hideUploadDialog",dialogId);
+    document.getElementById(dialogId).style.display = 'none';
+}
+
+// 设置对话框事件
+function setupDialogEvents() {
+    // 图片上传确认
+    document.getElementById('confirm-image-upload').addEventListener('click', async () => {
+        const fileInput = document.getElementById('image-file-input');
+        if (fileInput.files[0]) {
+            try {
+                frameupAPI.showLoading('上传图片中...');
+                const result = await frameupAPI.uploadImage(fileInput.files[0]);
+                frameupAPI.showSuccess('图片上传成功');
+                hideUploadDialog('image-upload-dialog');
+                loadUserUploads(); // 刷新上传列表
+            } catch (error) {
+                frameupAPI.showError(error);
+            }
+        }
+    });
+    
+    // 边框上传确认
+    document.getElementById('confirm-frame-upload').addEventListener('click', async () => {
+        const fileInput = document.getElementById('frame-file-input');
+        const settingsInput = document.getElementById('frame-settings-input');
+        
+        if (fileInput.files[0] && settingsInput.value.trim()) {
+            try {
+                frameupAPI.showLoading('上传边框中...');
+                const settings = JSON.parse(settingsInput.value);
+                const result = await frameupAPI.uploadFrame(fileInput.files[0], settings);
+                frameupAPI.showSuccess('边框上传成功');
+                hideUploadDialog('frame-upload-dialog');
+                loadDynamicFrames(); // 刷新边框列表
+            } catch (error) {
+                frameupAPI.showError(error);
+            }
+        } else {
+            frameupAPI.showError('请选择文件并填写设置');
+        }
+    });
+    
+    // 装饰上传确认
+    document.getElementById('confirm-decoration-upload').addEventListener('click', async () => {
+        const fileInput = document.getElementById('decoration-file-input');
+        const settingsInput = document.getElementById('decoration-settings-input');
+        
+        if (fileInput.files[0]) {
+            try {
+                frameupAPI.showLoading('上传装饰中...');
+                let settings = {};
+                if (settingsInput.value.trim()) {
+                    settings = JSON.parse(settingsInput.value);
+                }
+                const result = await frameupAPI.uploadDecoration(fileInput.files[0], settings);
+                frameupAPI.showSuccess('装饰上传成功');
+                hideUploadDialog('decoration-upload-dialog');
+                loadDynamicDecorations(); // 刷新装饰列表
+            } catch (error) {
+                frameupAPI.showError(error);
+            }
+        } else {
+            frameupAPI.showError('请选择文件');
+        }
+    });
+    
+    // 取消按钮事件
+    document.getElementById('cancel-image-upload').addEventListener('click', () => {
+        hideUploadDialog('image-upload-dialog');
+    });
+    
+    document.getElementById('cancel-frame-upload').addEventListener('click', () => {
+        hideUploadDialog('frame-upload-dialog');
+    });
+    
+    document.getElementById('cancel-decoration-upload').addEventListener('click', () => {
+        hideUploadDialog('decoration-upload-dialog');
+    });
+}
+
+// 初始化管理按钮
+function initManagementButtons() {
+    // 刷新按钮
+    document.getElementById('refresh-uploads-btn').addEventListener('click', loadUserUploads);
+    document.getElementById('refresh-frames-btn').addEventListener('click', loadDynamicFrames);
+    document.getElementById('refresh-decorations-btn').addEventListener('click', loadDynamicDecorations);
+    document.getElementById('refresh-history-btn').addEventListener('click', loadHistoryWorks);
+    
+    // 清空按钮
+    document.getElementById('clear-uploads-btn').addEventListener('click', async () => {
+        if (confirm('确定要清空所有上传的图片吗？此操作不可恢复。')) {
+            try {
+                await frameupAPI.clearUploads();
+                frameupAPI.showSuccess('上传文件已清空');
+                loadUserUploads();
+            } catch (error) {
+                frameupAPI.showError(error);
+            }
+        }
+    });
+    
+    document.getElementById('clear-history-btn').addEventListener('click', async () => {
+        if (confirm('确定要清空所有历史作品吗？此操作不可恢复。')) {
+            try {
+                await frameupAPI.clearHistory();
+                frameupAPI.showSuccess('历史作品已清空');
+                loadHistoryWorks();
+            } catch (error) {
+                frameupAPI.showError(error);
+            }
+        }
+    });
+    
+    // 重置素材按钮
+    document.getElementById('reset-assets-btn').addEventListener('click', async () => {
+        if (confirm('确定要重置所有素材吗？这将清空用户上传的边框和装饰。')) {
+            try {
+                frameupAPI.showLoading('重置素材中...');
+                await frameupAPI.resetAssets();
+                frameupAPI.showSuccess('素材已重置');
+                loadDynamicFrames();
+                loadDynamicDecorations();
+            } catch (error) {
+                frameupAPI.showError(error);
+            }
+        }
+    });
+    
+    // 保存当前作品按钮
+    document.getElementById('save-current-btn').addEventListener('click', saveCurrentWork);
+}
+
+// 加载动态内容
+function loadDynamicContent() {
+    loadUserUploads();
+    loadDynamicFrames();
+    loadDynamicDecorations();
+    loadHistoryWorks();
+}
+
+// 加载用户上传的图片
+async function loadUserUploads() {
+    try {
+        const result = await frameupAPI.getUploads();
+        const container = document.getElementById('user-uploads-container');
+        container.innerHTML = '';
+        
+        result.data.forEach(upload => {
+            const item = document.createElement('div');
+            item.className = 'asset-item image-asset-item';
+            item.dataset.imageSrc = upload.path;
+            item.innerHTML = `<img src="${upload.path}" alt="用户上传图片" />`;
+            
+            // 添加点击事件
+            item.addEventListener('click', () => {
+                if (typeof imageManager !== 'undefined' && imageManager.loadImageFromSrc) {
+                    imageManager.loadImageFromSrc(upload.path);
+                }
+            });
+            
+            container.appendChild(item);
+        });
+    } catch (error) {
+        console.error('加载用户上传图片失败:', error);
+    }
+}
+
+// 加载动态边框
+async function loadDynamicFrames() {
+    try {
+        const result = await frameupAPI.getFrames();
+        const container = document.getElementById('dynamic-frames-container');
+        container.innerHTML = '';
+        
+        result.data.forEach(frame => {
+            const item = document.createElement('div');
+            item.className = 'asset-item frame-asset-item';
+            item.dataset.borderId = frame.id;
+            item.innerHTML = `<img src="${frame.imagePath}" alt="${frame.name}" />`;
+            
+            // 添加点击事件（需要与现有边框管理器集成）
+            item.addEventListener('click', () => {
+                if (typeof borderManager !== 'undefined' && borderManager.loadBorder) {
+                    borderManager.loadBorder(frame.id, frame.settings);
+                }
+            });
+            
+            container.appendChild(item);
+        });
+    } catch (error) {
+        console.error('加载动态边框失败:', error);
+    }
+}
+
+// 加载动态装饰
+async function loadDynamicDecorations() {
+    try {
+        const result = await frameupAPI.getDecorations();
+        const container = document.getElementById('dynamic-decorations-container');
+        container.innerHTML = '';
+        
+        result.data.forEach(decoration => {
+            const item = document.createElement('div');
+            item.className = 'asset-item decoration-asset-item';
+            item.dataset.decorationId = decoration.id;
+            item.innerHTML = `<img src="${decoration.imagePath}" alt="${decoration.name}" />`;
+            
+            // 添加点击事件（需要与现有装饰管理器集成）
+            item.addEventListener('click', () => {
+                if (typeof decorationManager !== 'undefined' && decorationManager.addDecoration) {
+                    decorationManager.addDecoration(decoration.id, decoration.settings);
+                }
+            });
+            
+            container.appendChild(item);
+        });
+    } catch (error) {
+        console.error('加载动态装饰失败:', error);
+    }
+}
+
+// 加载历史作品
+async function loadHistoryWorks() {
+    try {
+        const result = await frameupAPI.getHistory();
+        const container = document.getElementById('history-container');
+        container.innerHTML = '';
+        
+        result.data.forEach(history => {
+            const item = document.createElement('div');
+            item.className = 'asset-item history-item';
+            
+            if (history.imagePath) {
+                item.innerHTML = ` <img src="${history.imagePath}" alt="历史作品" /> <div class="history-info"> ${new Date(history.saveTime).toLocaleDateString()} </div> `;
+                
+                // 添加点击事件加载历史作品
+                item.addEventListener('click', () => {
+                    loadHistoryWork(history);
+                });
+            } else {
+                item.innerHTML = ` <div style="display: flex; align-items: center; justify-content: center; height: 100%; background: #f0f0f0;"> <span style="font-size: 12px;">JSON</span> </div> <div class="history-info"> ${new Date(history.saveTime).toLocaleDateString()} </div> `;
+            }
+            
+            container.appendChild(item);
+        });
+    } catch (error) {
+        console.error('加载历史作品失败:', error);
+    }
+}
+
+// 加载历史作品
+async function loadHistoryWork(history) {
+    try {
+        frameupAPI.showLoading('加载历史作品中...');
+        
+        // 这里需要根据实际的状态管理器来恢复作品状态
+        // 示例代码，需要根据实际情况调整
+        if (typeof editorState !== 'undefined' && history.data) {
+            // 恢复图片
+            if (history.data.image) {
+                // 加载图片...
+            }
+            
+            // 恢复边框
+            if (history.data.border) {
+                // 应用边框...
+            }
+            
+            // 恢复装饰
+            if (history.data.decorations) {
+                // 恢复装饰...
+            }
+        }
+        
+        frameupAPI.hideLoading();
+        frameupAPI.showSuccess('历史作品已加载');
+    } catch (error) {
+        frameupAPI.showError(error);
+    }
+}
+
+// 保存当前作品
+async function saveCurrentWork() {
+    try {
+        frameupAPI.showLoading('保存作品中...');
+        
+        // 获取当前Canvas内容
+        if (typeof canvasEditor !== 'undefined' && canvasEditor.mainCanvas) {
+            const imageData = canvasEditor.mainCanvas.toDataURL('image/png');
+            
+            // 获取当前项目状态
+            const projectData = {
+                image: editorState ? editorState.getState().image : null,
+                border: editorState ? editorState.getState().border : null,
+                decorations: editorState ? editorState.getState().decorations : [],
+                saveTime: new Date().toISOString()
+            };
+            
+            const result = await frameupAPI.saveHistory(imageData, projectData);
+            frameupAPI.showSuccess('作品保存成功');
+            loadHistoryWorks(); // 刷新历史列表
+        } else {
+            frameupAPI.showError('没有可保存的内容');
+        }
+    } catch (error) {
+        frameupAPI.showError(error);
+    }
+}
