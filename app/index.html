@@ -30,24 +30,13 @@
       <!-- 2. 统一Canvas编辑区 -->
       <main class="main-editor">
         <!-- 图片上传占位符 -->
-        <div id="upload-placeholder" class="placeholder- class="upload-hint">将文件拖拽到此处，或</span>
+        <div id="upload-placeholder" class="placeholder-image">
+          <div class="upload-instructions">
+            <span class="upload-hint">将文件拖拽到此处，或</span>
             <div class="upload-buttons-container">
               <button class="upload-button">从本地上传</button>
               <button class="upload-button online-upload">从网盘选择</button>
             </div>
-          </div>
-        </div>
-
-        <!-- Canvas编辑器容器 -->
-        <div id="canvas-editor-container" class="canvas-editor-container" style="display: none;">
-          <canvas id="main-canvas" class="main-canvas"></canvas>
-          <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
-          <div id="canvas-controls" class="canvas-controls">
-            <div class="control-handle top-left"></div>
-            <div class="control-handle top-right"></div>
-            <div class="control-handle bottom-left"></div>
-            <div class="control-handle bottom-right"></div>
-            <div class="control-handle rotate-handle"></div>
           </div>
         </div>
 

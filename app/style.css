@@ -121,65 +121,6 @@ html {
   pointer-events: auto;
 }
 
-/* Canvas控制器 */
-.canvas-controls {
-  position: absolute;
-  pointer-events: none;
-  z-index: 3;
-  display: none;
-}
-
-.canvas-controls.visible {
-  display: block;
-}
-
-.control-handle {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  background: var(--primary-color);
-  border: 2px solid white;
-  border-radius: 50%;
-  cursor: pointer;
-  pointer-events: auto;
-  transform: translate(-50%, -50%);
-}
-
-.control-handle.top-left {
-  top: 0;
-  left: 0;
-  cursor: nw-resize;
-}
-
-.control-handle.top-right {
-  top: 0;
-  right: 0;
-  cursor: ne-resize;
-}
-
-.control-handle.bottom-left {
-  bottom: 0;
-  left: 0;
-  cursor: sw-resize;
-}
-
-.control-handle.bottom-right {
-  bottom: 0;
-  right: 0;
-  cursor: se-resize;
-}
-
-.control-handle.rotate-handle {
-  top: -30px;
-  left: 50%;
-  cursor: grab;
-  background: #ff6b6b;
-}
-
-.control-handle.rotate-handle:active {
-  cursor: grabbing;
-}
-
 /* 编辑器控件样式 */
 .editor-controls {
   position: absolute;

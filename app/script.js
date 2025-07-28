@@ -21,11 +21,15 @@ class EditorState {
         };
         
         this.listeners = [];
+        
+        // 调试功能：记录调用栈信息
+        this.debugMode = true; // 正式版本时设置为 false
+        this.operationCounter = 0;
     }
     
     updateState(updates) {
         this.data = { ...this.data, ...updates };
-        this.notifyListeners();
+        this.notifyListeners('updateState', { updates });
     }
     
     updateImage(element, width, height) {
@@ -35,7 +39,7 @@ class EditorState {
             originalHeight: height,
             minDimension: Math.min(width, height)
         };
-        this.notifyListeners();
+        this.notifyListeners('updateImage', { width, height, minDimension: Math.min(width, height) });
     }
     
     updateBorder(id, settings, image, widthRatio = null) {
@@ -46,7 +50,7 @@ class EditorState {
             widthRatio: widthRatio !== null ? widthRatio : this.data.border.widthRatio,
             isActive: id !== null
         };
-        this.notifyListeners();
+        this.notifyListeners('updateBorder', { id, widthRatio: this.data.border.widthRatio, isActive: id !== null });
     }
     
     addDecoration(decorationData) {
@@ -63,7 +67,11 @@ class EditorState {
         
         this.data.decorations.push(decoration);
         this.data.selectedDecorationId = decoration.id;
-        this.notifyListeners();
+        this.notifyListeners('addDecoration', { 
+            decorationId: decorationData.decorationId, 
+            newDecorationId: decoration.id,
+            totalDecorations: this.data.decorations.length 
+        });
         return decoration;
     }
     
@@ -71,38 +79,108 @@ class EditorState {
         const index = this.data.decorations.findIndex(d => d.id === id);
         if (index !== -1) {
             this.data.decorations[index] = { ...this.data.decorations[index], ...updates };
-            this.notifyListeners();
+            this.notifyListeners('updateDecoration', { id, updates, index });
         }
     }
     
     removeDecoration(id) {
+        const beforeCount = this.data.decorations.length;
         this.data.decorations = this.data.decorations.filter(d => d.id !== id);
+        const afterCount = this.data.decorations.length;
+        
         if (this.data.selectedDecorationId === id) {
             this.data.selectedDecorationId = null;
         }
-        this.notifyListeners();
+        this.notifyListeners('removeDecoration', { id, beforeCount, afterCount, wasSelected: this.data.selectedDecorationId === id });
     }
     
     selectDecoration(id) {
+        const previousId = this.data.selectedDecorationId;
         this.data.selectedDecorationId = id;
-        this.notifyListeners();
+        this.notifyListeners('selectDecoration', { previousId, newId: id });
     }
     
     setMode(mode) {
+        const previousMode = this.data.currentMode;
         this.data.currentMode = mode;
-        this.notifyListeners();
+        this.notifyListeners('setMode', { previousMode, newMode: mode });
     }
     
     addListener(callback) {
         this.listeners.push(callback);
+        if (this.debugMode) {
+            console.log(`🔧 [EditorState] 添加监听器，当前监听器数量: ${this.listeners.length}`);
+        }
     }
     
-    notifyListeners() {
-        this.listeners.forEach(callback => callback(this.data));
+    // 增强的 notifyListeners 方法，包含调试功能
+    notifyListeners(methodName = 'unknown', parameters = {}) {
+        this.operationCounter++;
+        
+        // 调试输出 - 正式版本时注释掉这整个 if 块
+        if (this.debugMode) {
+            console.group(`🚀 [EditorState] 操作 #${this.operationCounter}: ${methodName}`);
+            console.log('📋 调用方法:', methodName);
+            console.log('📊 传入参数:', parameters);
+            console.log('🎯 当前状态快照:', {
+                imageLoaded: !!this.data.image.element,
+                imageSize: this.data.image.element ? `${this.data.image.originalWidth}x${this.data.image.originalHeight}` : 'N/A',
+                borderActive: this.data.border.isActive,
+                borderId: this.data.border.id,
+                borderWidth: `${(this.data.border.widthRatio * 100).toFixed(1)}%`,
+                decorationsCount: this.data.decorations.length,
+                selectedDecoration: this.data.selectedDecorationId,
+                currentMode: this.data.currentMode,
+                listenersCount: this.listeners.length
+            });
+            
+            // 显示调用栈（可选，用于深度调试）
+            if (methodName !== 'unknown') {
+                console.log('📍 调用栈:', new Error().stack.split('\n').slice(2, 5).map(line => line.trim()));
+            }
+            
+            console.log(`⏰ 时间戳: ${new Date().toLocaleTimeString()}`);
+        }
+        
+        // 执行所有监听器回调
+        this.listeners.forEach((callback, index) => {
+            try {
+                callback(this.data);
+                if (this.debugMode) {
+                    console.log(`✅ 监听器 #${index + 1} 执行成功`);
+                }
+            } catch (error) {
+                console.error(`❌ 监听器 #${index + 1} 执行失败:`, error);
+            }
+        });
+        
+        if (this.debugMode) {
+            console.groupEnd();
+        }
     }
     
     getState() {
         return this.data;
+    }
+    
+    // 调试辅助方法
+    enableDebug() {
+        this.debugMode = true;
+        console.log('🔍 EditorState 调试模式已启用');
+    }
+    
+    disableDebug() {
+        this.debugMode = false;
+        console.log('🔇 EditorState 调试模式已禁用');
+    }
+    
+    getDebugInfo() {
+        return {
+            operationCounter: this.operationCounter,
+            listenersCount: this.listeners.length,
+            debugMode: this.debugMode,
+            currentState: this.data
+        };
     }
 }
 
@@ -164,21 +242,19 @@ class Utils {
 // ===== Canvas编辑器核心类 =====
 class CanvasEditor {
     constructor() {
-        this.container = document.getElementById('canvas-editor-container');
-        this.mainCanvas = document.getElementById('main-canvas');
-        this.overlayCanvas = document.getElementById('overlay-canvas');
-        this.controls = document.getElementById('canvas-controls');
+        // 获取主编辑区容器
+        this.mainEditor = document.querySelector('.main-editor');
+        
+        // 创建Canvas容器
+        this.createCanvasContainer();
         
         this.mainCtx = this.mainCanvas.getContext('2d');
         this.overlayCtx = this.overlayCanvas.getContext('2d');
         
         this.interaction = {
             isDragging: false,
-            isResizing: false,
-            isRotating: false,
             startPos: { x: 0, y: 0 },
-            startDecoration: null,
-            resizeHandle: null
+            startDecoration: null
         };
         
         this.borderSettings = {};
@@ -187,13 +263,35 @@ class CanvasEditor {
         this.init();
     }
     
+    createCanvasContainer() {
+        // 创建Canvas编辑器容器
+        this.container = document.createElement('div');
+        this.container.className = 'canvas-editor-container';
+        this.container.style.display = 'none'; // 初始隐藏
+        
+        // 创建主Canvas
+        this.mainCanvas = document.createElement('canvas');
+        this.mainCanvas.className = 'main-canvas';
+        
+        // 创建覆盖层Canvas
+        this.overlayCanvas = document.createElement('canvas');
+        this.overlayCanvas.className = 'overlay-canvas';
+        
+        // 将Canvas添加到容器
+        this.container.appendChild(this.mainCanvas);
+        this.container.appendChild(this.overlayCanvas);
+        
+        // 将容器添加到主编辑区
+        this.mainEditor.appendChild(this.container);
+    }
+    
     init() {
         this.setupEventListeners();
         editorState.addListener(this.onStateChange.bind(this));
     }
     
     setupEventListeners() {
-        // Canvas交互事件
+        // 使用passive事件监听器避免警告
         this.overlayCanvas.addEventListener('mousedown', this.handleMouseDown.bind(this), { passive: false });
         this.overlayCanvas.addEventListener('mousemove', this.handleMouseMove.bind(this), { passive: true });
         this.overlayCanvas.addEventListener('mouseup', this.handleMouseUp.bind(this), { passive: true });
@@ -205,93 +303,142 @@ class CanvasEditor {
         
         // 窗口大小变化
         window.addEventListener('resize', this.handleResize.bind(this), { passive: true });
+    }
+    
+    // 显示Canvas编辑器
+    showEditor() {
+        // 隐藏上传占位符
+        const placeholder = document.getElementById('upload-placeholder');
+        if (placeholder) {
+            placeholder.style.display = 'none';
+        }
         
-        // 控制手柄事件
-        this.setupControlHandles();
+        // 显示Canvas容器
+        this.container.style.display = 'flex';
+        
+        // 调整Canvas尺寸
+        this.resizeCanvas();
     }
     
-    setupControlHandles() {
-        const handles = this.controls.querySelectorAll('.control-handle');
-        handles.forEach(handle => {
-            handle.addEventListener('mousedown', this.handleControlMouseDown.bind(this), { passive: false });
-        });
-    }
-    
-    onStateChange(state) {
-        if (state.image.element) {
-            this.resizeCanvas();
-            this.render();
-            this.updateControlsVisibility();
+    // 隐藏Canvas编辑器
+    hideEditor() {
+        this.container.style.display = 'none';
+        
+        // 显示上传占位符
+        const placeholder = document.getElementById('upload-placeholder');
+        if (placeholder) {
+            placeholder.style.display = 'flex';
         }
     }
     
-    resizeCanvas() {
+    // 计算Canvas尺寸和图片布局
+    calculateCanvasLayout() {
         const state = editorState.getState();
-        const { image } = state;
+        const { image, border } = state;
         
-        if (!image.element) return;
+        if (!image.element) return null;
         
+        let canvasWidth = image.originalWidth;
+        let canvasHeight = image.originalHeight;
+        
+        // 如果图片超过2048x2048，按比例缩小
+        const maxSize = 2048;
+        if (canvasWidth > maxSize || canvasHeight > maxSize) {
+            const scale = Math.min(maxSize / canvasWidth, maxSize / canvasHeight);
+            canvasWidth = Math.floor(canvasWidth * scale);
+            canvasHeight = Math.floor(canvasHeight * scale);
+        }
+        
+        // 计算边框参数 - 修复outfit计算逻辑，参考原始代码[citation](2)
+        let imageRect = {
+            x: 0,
+            y: 0,
+            width: canvasWidth,
+            height: canvasHeight
+        };
+        
+        if (border.isActive && border.settings) {
+            const minDim = Math.min(canvasWidth, canvasHeight);
+            const borderWidth = minDim * border.widthRatio;
+            
+            // 解析边框配置 - 使用与原始代码相同的逻辑[citation](2)
+            const baseWidths = Utils.parseCssValue(border.settings.width || '40');
+            const baseOutsets = Utils.parseCssValue(border.settings.outset || '0');
+            const maxBaseWidth = Math.max(...baseWidths, 1);
+            
+            // 计算最终边框宽度
+            const finalCanvasWidths = baseWidths.map(bw => borderWidth * (bw / maxBaseWidth));
+            
+            // 修复outset计算逻辑 - 按照原始代码[citation](2)的计算方式
+            const finalCanvasOutsets = baseOutsets.map((bo, i) => 
+                finalCanvasWidths[i] * (baseWidths[i] > 0 ? bo / baseWidths[i] : 0)
+            );
+            
+            // 计算padding（边框内侧到图片的距离）- 这里是关键修复
+            const finalCanvasPaddings = finalCanvasWidths.map((fw, i) => fw - finalCanvasOutsets[i]);
+            
+            // 应用CSS顺序：上右下左，确保非负值
+            const paddingValues = finalCanvasPaddings.map(p => Math.max(p, 0));
+            const [pTop, pRight, pBottom, pLeft] = [
+                paddingValues[0] || 0,
+                paddingValues[1] || paddingValues[0] || 0,
+                paddingValues[2] || paddingValues[0] || 0,
+                paddingValues[3] || paddingValues[1] || paddingValues[0] || 0
+            ];
+            
+            // 图片绘制区域（边框内侧 + outset）
+            imageRect = {
+                x: pLeft,
+                y: pTop,
+                width: canvasWidth - pLeft - pRight,
+                height: canvasHeight - pTop - pBottom
+            };
+        }
+        
+        // 计算显示缩放比例（适应屏幕）
         const containerRect = this.container.getBoundingClientRect();
-        const maxWidth = containerRect.width * 0.9;
-        const maxHeight = containerRect.height * 0.9;
+        const maxDisplayWidth = containerRect.width * 0.9;
+        const maxDisplayHeight = containerRect.height * 0.9;
         
-        // 计算显示尺寸
-        const scale = Math.min(
-            maxWidth / image.originalWidth,
-            maxHeight / image.originalHeight
+        const displayScale = Math.min(
+            maxDisplayWidth / canvasWidth,
+            maxDisplayHeight / canvasHeight,
+            1 // 不放大，只缩小
         );
         
-        const displayWidth = image.originalWidth * scale;
-        const displayHeight = image.originalHeight * scale;
+        return {
+            canvasWidth,
+            canvasHeight,
+            imageRect,
+            displayScale
+        };
+    }
+    
+    resizeCanvas() {
+        const layout = this.calculateCanvasLayout();
+        if (!layout) return;
         
-        // 设置Canvas实际尺寸（用于绘制）
-        this.mainCanvas.width = image.originalWidth;
-        this.mainCanvas.height = image.originalHeight;
-        this.overlayCanvas.width = image.originalWidth;
-        this.overlayCanvas.height = image.originalHeight;
+        const { canvasWidth, canvasHeight, displayScale } = layout;
+        
+        // 设置Canvas实际尺寸
+        this.mainCanvas.width = canvasWidth;
+        this.mainCanvas.height = canvasHeight;
+        this.overlayCanvas.width = canvasWidth;
+        this.overlayCanvas.height = canvasHeight;
         
         // 设置Canvas显示尺寸
+        const displayWidth = canvasWidth * displayScale;
+        const displayHeight = canvasHeight * displayScale;
+        
         this.mainCanvas.style.width = `${displayWidth}px`;
         this.mainCanvas.style.height = `${displayHeight}px`;
         this.overlayCanvas.style.width = `${displayWidth}px`;
         this.overlayCanvas.style.height = `${displayHeight}px`;
         
-        // 更新控制器位置
-        this.updateControlsPosition();
+        this.render();
     }
     
-    updateControlsPosition() {
-        const state = editorState.getState();
-        if (!state.selectedDecorationId) return;
-        
-        const decoration = state.decorations.find(d => d.id === state.selectedDecorationId);
-        if (!decoration) return;
-        
-        const rect = this.overlayCanvas.getBoundingClientRect();
-        const size = decoration.originalSize * decoration.scale;
-        const centerX = decoration.x * rect.width;
-        const centerY = decoration.y * rect.height;
-        
-        this.controls.style.left = `${centerX - size/2}px`;
-        this.controls.style.top = `${centerY - size/2}px`;
-        this.controls.style.width = `${size}px`;
-        this.controls.style.height = `${size}px`;
-        this.controls.style.transform = `rotate(${decoration.rotation}deg)`;
-    }
-    
-    updateControlsVisibility() {
-        const state = editorState.getState();
-        const isDecorationMode = state.currentMode === 'decoration';
-        const hasSelectedDecoration = state.selectedDecorationId !== null;
-        
-        if (isDecorationMode && hasSelectedDecoration) {
-            this.controls.classList.add('visible');
-            this.updateControlsPosition();
-        } else {
-            this.controls.classList.remove('visible');
-        }
-    }
-    
+    // 主渲染函数
     render() {
         this.clearCanvas();
         this.renderImage();
@@ -305,129 +452,138 @@ class CanvasEditor {
         this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
     }
     
+    // 修复：只在这里绘制图片，不在renderBorder中重复绘制
     renderImage() {
+        const layout = this.calculateCanvasLayout();
         const state = editorState.getState();
-        const { image, border } = state;
         
-        if (!image.element) return;
+        if (!layout || !state.image.element) return;
         
-        // 计算图片绘制区域（考虑边框外扩）
-        let padding = { top: 0, right: 0, bottom: 0, left: 0 };
+        const { imageRect } = layout;
         
-        if (border.isActive && border.settings) {
-            const minDim = Math.min(this.mainCanvas.width, this.mainCanvas.height);
-            const borderWidth = minDim * border.widthRatio;
-            
-            const baseWidths = Utils.parseCssValue(border.settings.width || '40');
-            const baseOutsets = Utils.parseCssValue(border.settings.outset || '0');
-            const maxBaseWidth = Math.max(...baseWidths, 1);
-            
-            const finalWidths = baseWidths.map(bw => borderWidth * (bw / maxBaseWidth));
-            const finalOutsets = baseOutsets.map((bo, i) => finalWidths[i] * (baseWidths[i] > 0 ? bo / baseWidths[i] : 0));
-            const finalPaddings = finalWidths.map((fw, i) => fw - finalOutsets[i]);
-            
-            padding = {
-                top: Math.max(finalPaddings[0] || 0, 0),
-                right: Math.max(finalPaddings[1] || finalPaddings[0] || 0, 0),
-                bottom: Math.max(finalPaddings[2] || finalPaddings[0] || 0, 0),
-                left: Math.max(finalPaddings[3] || finalPaddings[1] || finalPaddings[0] || 0, 0)
-            };
-        }
-        
-        // 绘制图片
+        // 绘制图片到指定位置（边框内侧 + outset区域）
         this.mainCtx.drawImage(
-            image.element,
-            padding.left,
-            padding.top,
-            this.mainCanvas.width - padding.left - padding.right,
-            this.mainCanvas.height - padding.top - padding.bottom
+            state.image.element,
+            imageRect.x,
+            imageRect.y,
+            imageRect.width,
+            imageRect.height
         );
     }
     
+    // 修复：只绘制边框，不绘制图片
     renderBorder() {
         const state = editorState.getState();
         const { border } = state;
         
         if (!border.isActive || !border.image || !border.settings) return;
         
+        const layout = this.calculateCanvasLayout();
+        if (!layout) return;
+        
         this.drawBorderImage(
             this.mainCtx,
             border.image,
             border.settings,
-            this.mainCanvas.width,
-            this.mainCanvas.height,
+            layout.canvasWidth,
+            layout.canvasHeight,
             border.widthRatio
         );
     }
     
     drawBorderImage(ctx, borderImage, settings, canvasWidth, canvasHeight, widthRatio) {
-        const baseWidths = Utils.parseCssValue(settings.width || '40');
-        const maxBaseWidth = Math.max(...baseWidths, 1);
         const minDim = Math.min(canvasWidth, canvasHeight);
         const borderWidth = minDim * widthRatio;
         
+        // 解析边框配置
+        const baseWidths = Utils.parseCssValue(settings.width || '40');
+        const maxBaseWidth = Math.max(...baseWidths, 1);
         const finalWidths = baseWidths.map(bw => borderWidth * (bw / maxBaseWidth));
-        const [wTop, wRight, wBottom, wLeft] = [
-            finalWidths[0] || 0,
-            finalWidths[1] || finalWidths[0] || 0,
-            finalWidths[2] || finalWidths[0] || 0,
-            finalWidths[3] || finalWidths[1] || finalWidths[0] || 0
-        ];
         
-        const slices = Utils.parseCssValue(settings.slice || '40');
-        const [sTop, sRight, sBottom, sLeft] = [
-            slices[0] || 0,
-            slices[1] || slices[0] || 0,
-            slices[2] || slices[0] || 0,
-            slices[3] || slices[1] || slices[0] || 0
-        ];
+        // 九宫格切片尺寸
+        const [topWidth, rightWidth, bottomWidth, leftWidth] = finalWidths;
         
         // 绘制九宫格边框
-        this.drawNinePatchBorder(ctx, borderImage, {
-            slices: { top: sTop, right: sRight, bottom: sBottom, left: sLeft },
-            widths: { top: wTop, right: wRight, bottom: wBottom, left: wLeft },
-            canvasWidth,
-            canvasHeight
-        });
+        this.drawNinePatchBorder(ctx, borderImage, canvasWidth, canvasHeight, {
+            top: topWidth,
+            right: rightWidth,
+            bottom: bottomWidth,
+            left: leftWidth
+        }, settings);
     }
     
-    drawNinePatchBorder(ctx, borderImage, config) {
-        const { slices, widths, canvasWidth, canvasHeight } = config;
-        const { top: sTop, right: sRight, bottom: sBottom, left: sLeft } = slices;
-        const { top: wTop, right: wRight, bottom: wBottom, left: wLeft } = widths;
+    // 修复：统一使用宽度值而不是坐标值来定义切片
+    drawNinePatchBorder(ctx, borderImage, canvasWidth, canvasHeight, borderWidths, settings) {
+        const { top, right, bottom, left } = borderWidths;
+        const imgW = borderImage.width;
+        const imgH = borderImage.height;
         
-        const imgWidth = borderImage.width;
-        const imgHeight = borderImage.height;
+        // 修复：从settings.json中获取切片宽度值，而不是坐标值
+        let sliceTopWidth, sliceRightWidth, sliceBottomWidth, sliceLeftWidth;
         
-        // 九个区域的绘制
-        const regions = [
-            // 四个角
-            { sx: 0, sy: 0, sw: sLeft, sh: sTop, dx: 0, dy: 0, dw: wLeft, dh: wTop },
-            { sx: imgWidth - sRight, sy: 0, sw: sRight, sh: sTop, dx: canvasWidth - wRight, dy: 0, dw: wRight, dh: wTop },
-            { sx: 0, sy: imgHeight - sBottom, sw: sLeft, sh: sBottom, dx: 0, dy: canvasHeight - wBottom, dw: wLeft, dh: wBottom },
-            { sx: imgWidth - sRight, sy: imgHeight - sBottom, sw: sRight, sh: sBottom, dx: canvasWidth - wRight, dy: canvasHeight - wBottom, dw: wRight, dh: wBottom },
+        if (settings.slice) {
+            // 解析slice配置：上 右 下 左的宽度值（不再是坐标）
+            const sliceWidths = Utils.parseCssValue(settings.slice);
+            [sliceTopWidth, sliceRightWidth, sliceBottomWidth, sliceLeftWidth] = sliceWidths;
             
-            // 四条边
-            { sx: sLeft, sy: 0, sw: imgWidth - sLeft - sRight, sh: sTop, dx: wLeft, dy: 0, dw: canvasWidth - wLeft - wRight, dh: wTop },
-            { sx: sLeft, sy: imgHeight - sBottom, sw: imgWidth - sLeft - sRight, sh: sBottom, dx: wLeft, dy: canvasHeight - wBottom, dw: canvasWidth - wLeft - wRight, dh: wBottom },
-            { sx: 0, sy: sTop, sw: sLeft, sh: imgHeight - sTop - sBottom, dx: 0, dy: wTop, dw: wLeft, dh: canvasHeight - wTop - wBottom },
-            { sx: imgWidth - sRight, sy: sTop, sw: sRight, sh: imgHeight - sTop - sBottom, dx: canvasWidth - wRight, dy: wTop, dw: wRight, dh: canvasHeight - wTop - wBottom }
-        ];
-        
-        regions.forEach(region => {
-            if (region.sw > 0 && region.sh > 0 && region.dw > 0 && region.dh > 0) {
-                ctx.drawImage(
-                    borderImage,
-                    region.sx, region.sy, region.sw, region.sh,
-                    region.dx, region.dy, region.dw, region.dh
-                );
+            // 调试输出
+            if (editorState.debugMode) {
+                console.log('🔧 [Border] 切片宽度配置:', {
+                    原始配置: settings.slice,
+                    解析结果: sliceWidths,
+                    边框图片尺寸: `${imgW}x${imgH}`,
+                    最终切片宽度: { sliceTopWidth, sliceRightWidth, sliceBottomWidth, sliceLeftWidth }
+                });
             }
-        });
+        } else {
+            // 如果没有slice配置，使用默认值（保持向后兼容）
+            sliceTopWidth = imgH * 0.25;
+            sliceRightWidth = imgW * 0.25;
+            sliceBottomWidth = imgH * 0.25;
+            sliceLeftWidth = imgW * 0.25;
+            
+            console.warn('⚠️ [Border] 未找到slice配置，使用默认切片宽度');
+        }
+        
+        // 计算切片位置（从宽度值转换为坐标值）
+        const sliceTop = sliceTopWidth;
+        const sliceRight = imgW - sliceRightWidth;
+        const sliceBottom = imgH - sliceBottomWidth;
+        const sliceLeft = sliceLeftWidth;
+        
+        // 调试输出切片计算结果
+        if (editorState.debugMode) {
+            console.log('🎯 [Border] 切片坐标计算:', {
+                切片位置: { sliceTop, sliceRight, sliceBottom, sliceLeft },
+                画布尺寸: `${canvasWidth}x${canvasHeight}`,
+                边框宽度: { top, right, bottom, left }
+            });
+        }
+        
+        // 绘制四个角
+        // 左上角
+        ctx.drawImage(borderImage, 0, 0, sliceLeft, sliceTop, 0, 0, left, top);
+        // 右上角
+        ctx.drawImage(borderImage, sliceRight, 0, imgW - sliceRight, sliceTop, canvasWidth - right, 0, right, top);
+        // 左下角
+        ctx.drawImage(borderImage, 0, sliceBottom, sliceLeft, imgH - sliceBottom, 0, canvasHeight - bottom, left, bottom);
+        // 右下角
+        ctx.drawImage(borderImage, sliceRight, sliceBottom, imgW - sliceRight, imgH - sliceBottom, canvasWidth - right, canvasHeight - bottom, right, bottom);
+        
+        // 绘制四条边
+        // 上边
+        ctx.drawImage(borderImage, sliceLeft, 0, sliceRight - sliceLeft, sliceTop, left, 0, canvasWidth - left - right, top);
+        // 下边
+        ctx.drawImage(borderImage, sliceLeft, sliceBottom, sliceRight - sliceLeft, imgH - sliceBottom, left, canvasHeight - bottom, canvasWidth - left - right, bottom);
+        // 左边
+        ctx.drawImage(borderImage, 0, sliceTop, sliceLeft, sliceBottom - sliceTop, 0, top, left, canvasHeight - top - bottom);
+        // 右边
+        ctx.drawImage(borderImage, sliceRight, sliceTop, imgW - sliceRight, sliceBottom - sliceTop, canvasWidth - right, top, right, canvasHeight - top - bottom);
     }
     
     renderDecorations() {
-        const state = editorState.getState();
-        state.decorations.forEach(decoration => {
+        const { decorations } = editorState.getState();
+        decorations.forEach(decoration => {
             this.renderDecoration(decoration);
         });
     }
@@ -459,26 +615,31 @@ class CanvasEditor {
     }
     
     renderOverlay() {
-        const state = editorState.getState();
-        if (state.currentMode !== 'decoration' || !state.selectedDecorationId) return;
+        // 清空覆盖层
+        this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
         
-        const decoration = state.decorations.find(d => d.id === state.selectedDecorationId);
-        if (!decoration) return;
+        const { selectedDecorationId, decorations, currentMode } = editorState.getState();
         
-        this.drawDecorationOutline(decoration);
+        // 只在装饰模式下显示选中效果
+        if (selectedDecorationId && currentMode === 'decoration') {
+            const selectedDecoration = decorations.find(d => d.id === selectedDecorationId);
+            if (selectedDecoration) {
+                this.drawDecorationSelection(selectedDecoration);
+            }
+        }
     }
     
-    drawDecorationOutline(decoration) {
+    drawDecorationSelection(decoration) {
         const { x, y, scale, rotation } = decoration;
         const size = decoration.originalSize * scale;
-        const centerX = x * this.overlayCanvas.width;
-        const centerY = y * this.overlayCanvas.height;
+        const centerX = x * this.mainCanvas.width;
+        const centerY = y * this.mainCanvas.height;
         
         this.overlayCtx.save();
         this.overlayCtx.translate(centerX, centerY);
         this.overlayCtx.rotate((rotation * Math.PI) / 180);
         
-        // 绘制选中框
+        // 绘制选中边框（虚线）
         this.overlayCtx.strokeStyle = '#00aabb';
         this.overlayCtx.lineWidth = 2;
         this.overlayCtx.setLineDash([5, 5]);
@@ -487,488 +648,144 @@ class CanvasEditor {
         this.overlayCtx.restore();
     }
     
-    // 交互事件处理
+    // 状态变化监听
+    onStateChange(state) {
+        if (state.image.element) {
+            this.showEditor();
+        } else {
+            this.hideEditor();
+        }
+        this.render();
+    }
+    
+    // 事件处理
     handleMouseDown(e) {
         e.preventDefault();
         const pos = Utils.getCanvasPosition(e, this.overlayCanvas);
-        this.startInteraction(pos);
+        const hitDecoration = this.hitTestDecorations(pos);
+        
+        if (hitDecoration) {
+            editorState.selectDecoration(hitDecoration.id);
+            this.startDrag(pos, hitDecoration);
+        } else {
+            editorState.selectDecoration(null);
+        }
+        
+        this.render();
+    }
+    
+    handleMouseMove(e) {
+        if (this.interaction.isDragging) {
+            const pos = Utils.getCanvasPosition(e, this.overlayCanvas);
+            this.updateDrag(pos);
+        }
+    }
+    
+    handleMouseUp(e) {
+        this.stopDrag();
     }
     
     handleTouchStart(e) {
         e.preventDefault();
-        const pos = Utils.getCanvasPosition(e, this.overlayCanvas);
-        this.startInteraction(pos);
-    }
-    
-    startInteraction(pos) {
-        const state = editorState.getState();
-        
-        if (state.currentMode === 'decoration') {
-            const hitDecoration = this.hitTestDecorations(pos);
-            
-            if (hitDecoration) {
-                editorState.selectDecoration(hitDecoration.id);
-                this.interaction.isDragging = true;
-                this.interaction.startPos = pos;
-                this.interaction.startDecoration = { ...hitDecoration };
-            } else {
-                editorState.selectDecoration(null);
-            }
-        }
-    }
-    
-    handleMouseMove(e) {
-        if (!this.interaction.isDragging) return;
-        
-        const pos = Utils.getCanvasPosition(e, this.overlayCanvas);
-        this.updateDrag(pos);
+        this.handleMouseDown(e);
     }
     
     handleTouchMove(e) {
-        if (!this.interaction.isDragging) return;
-        
         e.preventDefault();
-        const pos = Utils.getCanvasPosition(e, this.overlayCanvas);
-        this.updateDrag(pos);
+        this.handleMouseMove(e);
+    }
+    
+    handleTouchEnd(e) {
+        this.handleMouseUp(e);
+    }
+    
+    handleResize() {
+        this.resizeCanvas();
+    }
+    
+    startDrag(pos, decoration) {
+        this.interaction.isDragging = true;
+        this.interaction.startPos = pos;
+        this.interaction.startDecoration = { ...decoration };
     }
     
     updateDrag(pos) {
-        const state = editorState.getState();
-        if (!state.selectedDecorationId) return;
+        if (!this.interaction.isDragging || !this.interaction.startDecoration) return;
         
         const deltaX = pos.x - this.interaction.startPos.x;
         const deltaY = pos.y - this.interaction.startPos.y;
         
-        const newX = this.interaction.startDecoration.x + deltaX / this.overlayCanvas.width;
-        const newY = this.interaction.startDecoration.y + deltaY / this.overlayCanvas.height;
+        const newX = this.interaction.startDecoration.x + (deltaX / this.mainCanvas.width);
+        const newY = this.interaction.startDecoration.y + (deltaY / this.mainCanvas.height);
         
-        editorState.updateDecoration(state.selectedDecorationId, {
+        editorState.updateDecoration(this.interaction.startDecoration.id, {
             x: Math.max(0, Math.min(1, newX)),
             y: Math.max(0, Math.min(1, newY))
         });
+        
+        this.render();
     }
     
-    handleMouseUp(e) {
-        this.endInteraction();
-    }
-    
-    handleTouchEnd(e) {
-        this.endInteraction();
-    }
-    
-    endInteraction() {
+    stopDrag() {
         this.interaction.isDragging = false;
-        this.interaction.isResizing = false;
-        this.interaction.isRotating = false;
+        this.interaction.startPos = { x: 0, y: 0 };
         this.interaction.startDecoration = null;
     }
     
-    handleControlMouseDown(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const handle = e.target;
-        const pos = Utils.getCanvasPosition(e, this.overlayCanvas);
-        
-        if (handle.classList.contains('rotate-handle')) {
-            this.interaction.isRotating = true;
-        } else {
-            this.interaction.isResizing = true;
-            this.interaction.resizeHandle = handle.className;
-        }
-        
-        this.interaction.startPos = pos;
-        
-        const state = editorState.getState();
-        const decoration = state.decorations.find(d => d.id === state.selectedDecorationId);
-        this.interaction.startDecoration = { ...decoration };
-    }
-    
     hitTestDecorations(pos) {
-        const state = editorState.getState();
+        const { decorations } = editorState.getState();
         
         // 从后往前检测（后添加的在上层）
-        for (let i = state.decorations.length - 1; i >= 0; i--) {
-            const decoration = state.decorations[i];
-            if (this.isPointInDecoration(pos, decoration)) {
+        for (let i = decorations.length - 1; i >= 0; i--) {
+            const decoration = decorations[i];
+            const size = decoration.originalSize * decoration.scale;
+            const centerX = decoration.x * this.mainCanvas.width;
+            const centerY = decoration.y * this.mainCanvas.height;
+            
+            // 简单的矩形碰撞检测
+            if (pos.x >= centerX - size/2 && pos.x <= centerX + size/2 &&
+                pos.y >= centerY - size/2 && pos.y <= centerY + size/2) {
                 return decoration;
             }
         }
         
         return null;
     }
-    
-    isPointInDecoration(pos, decoration) {
-        const { x, y, scale, rotation } = decoration;
-        const size = decoration.originalSize * scale;
-        const centerX = x * this.overlayCanvas.width;
-        const centerY = y * this.overlayCanvas.height;
-        
-        // 考虑旋转的碰撞检测
-        const cos = Math.cos(-rotation * Math.PI / 180);
-        const sin = Math.sin(-rotation * Math.PI / 180);
-        
-        const dx = pos.x - centerX;
-        const dy = pos.y - centerY;
-        
-        const rotatedX = dx * cos - dy * sin;
-        const rotatedY = dx * sin + dy * cos;
-        
-        return Math.abs(rotatedX) <= size/2 && Math.abs(rotatedY) <= size/2;
-    }
-    
-    handleResize() {
-        this.resizeCanvas();
-        this.render();
-    }
-    
-    // 加载图片
-    async loadImage(src) {
-        try {
-            const img = await Utils.loadImage(src);
-            editorState.updateImage(img, img.naturalWidth, img.naturalHeight);
-            
-            // 显示Canvas编辑器
-            document.getElementById('upload-placeholder').style.display = 'none';
-            this.container.style.display = 'block';
-            
-            return img;
-        } catch (error) {
-            console.error('加载图片失败:', error);
-            throw error;
-        }
-    }
-    
-    // 设置边框
-    async setBorder(borderId, widthRatio = null) {
-        try {
-            const settings = await this.loadBorderSettings(borderId);
-            const borderImage = await Utils.loadImage(`assets/frames/${borderId}/frame.png`);
-            
-            editorState.updateBorder(borderId, settings, borderImage, widthRatio);
-        } catch (error) {
-            console.error('设置边框失败:', error);
-        }
-    }
-    
-    async loadBorderSettings(borderId) {
-        if (this.borderSettings[borderId]) {
-            return this.borderSettings[borderId];
-        }
-        
-        const settings = await Utils.loadJson(`assets/frames/${borderId}/setting.json`);
-        this.borderSettings[borderId] = settings;
-        return settings;
-    }
-    
-    // 添加装饰
-    async addDecoration(decorationId) {
-        try {
-            const settings = await this.loadDecorationSettings(decorationId);
-            const decorationImage = await Utils.loadImage(`assets/decos/${decorationId}/deco.png`);
-            
-            const state = editorState.getState();
-            const minDim = Math.min(this.mainCanvas.width, this.mainCanvas.height);
-            const originalSize = minDim * (settings.defaultScale || 0.1);
-            
-            const decoration = editorState.addDecoration({
-                decorationId,
-                image: decorationImage,
-                defaultScale: settings.defaultScale || 0.1,
-                originalSize
-            });
-            
-            return decoration;
-        } catch (error) {
-            console.error('添加装饰失败:', error);
-        }
-    }
-    
-    async loadDecorationSettings(decorationId) {
-        if (this.decorationSettings[decorationId]) {
-            return this.decorationSettings[decorationId];
-        }
-        
-        const settings = await Utils.loadJson(`assets/decos/${decorationId}/setting.json`);
-        this.decorationSettings[decorationId] = settings || { defaultScale: 0.1 };
-        return this.decorationSettings[decorationId];
-    }
-    
-    // 导出Canvas
-    exportCanvas() {
-        return this.mainCanvas.toDataURL('image/png');
-    }
-    
-    async copyToClipboard() {
-        return new Promise((resolve, reject) => {
-            this.mainCanvas.toBlob(async (blob) => {
-                try {
-                    await navigator.clipboard.write([
-                        new ClipboardItem({ 'image/png': blob })
-                    ]);
-                    resolve();
-                } catch (error) {
-                    reject(error);
-                }
-            }, 'image/png');
-        });
-    }
 }
 
-// ===== 应用管理器 =====
-class AppManager {
+// ===== 图片管理器 =====
+class ImageManager {
     constructor() {
-        this.canvasEditor = new CanvasEditor();
         this.setupEventListeners();
-        this.setupStateListeners();
     }
     
     setupEventListeners() {
-        // 导航按钮
-        const navButtons = document.querySelectorAll('.nav-button');
-        navButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                const mode = button.dataset.mode;
-                this.switchMode(mode);
-            });
-        });
-        
-        // 上传按钮
+        // 文件上传按钮
         const uploadButton = document.querySelector('.upload-button:not(.online-upload)');
         if (uploadButton) {
             uploadButton.addEventListener('click', () => this.openFileDialog());
         }
+        
+        // 图片素材点击事件
+        const imageAssets = document.querySelectorAll('.image-asset-item');
+        imageAssets.forEach(asset => {
+            asset.addEventListener('click', () => {
+                const imageSrc = asset.dataset.imageSrc;
+                if (imageSrc) {
+                    this.loadImageFromSrc(imageSrc);
+                }
+            });
+        });
         
         // 拖拽上传
         const placeholder = document.getElementById('upload-placeholder');
         if (placeholder) {
             placeholder.addEventListener('dragover', this.handleDragOver.bind(this));
             placeholder.addEventListener('drop', this.handleDrop.bind(this));
-            placeholder.addEventListener('dragleave', this.handleDragLeave.bind(this));
-        }
-        
-        // 素材点击事件
-        this.setupAssetEvents();
-        
-        // 控制器事件
-        this.setupControlEvents();
-    }
-    
-    setupAssetEvents() {
-        // 图片素材
-        const imageAssets = document.querySelectorAll('.image-asset-item');
-        imageAssets.forEach(asset => {
-            asset.addEventListener('click', () => {
-                const imageSrc = asset.dataset.imageSrc;
-                this.canvasEditor.loadImage(imageSrc);
-            });
-        });
-        
-        // 边框素材
-        const frameAssets = document.querySelectorAll('.frame-asset-item');
-        frameAssets.forEach(asset => {
-            asset.addEventListener('click', () => {
-                const borderId = asset.dataset.borderId;
-                this.canvasEditor.setBorder(borderId);
-                
-                // 更新选中状态
-                frameAssets.forEach(a => a.classList.remove('active-asset'));
-                asset.classList.add('active-asset');
-            });
-        });
-        
-        // 装饰素材
-        const decorationAssets = document.querySelectorAll('.decoration-asset-item');
-        decorationAssets.forEach(asset => {
-            asset.addEventListener('click', () => {
-                const decorationId = asset.dataset.decorationId;
-                this.canvasEditor.addDecoration(decorationId);
-            });
-        });
-    }
-    
-    setupControlEvents() {
-        // 边框宽度滑动条
-        const borderWidthSlider = document.getElementById('border-width-slider');
-        const borderWidthLabel = document.getElementById('border-width-label');
-        
-        if (borderWidthSlider) {
-            borderWidthSlider.addEventListener('input', () => {
-                const ratio = parseFloat(borderWidthSlider.value) / 100;
-                const state = editorState.getState();
-                
-                if (state.border.isActive) {
-                    editorState.updateBorder(
-                        state.border.id,
-                        state.border.settings,
-                        state.border.image,
-                        ratio
-                    );
-                }
-                
-                if (borderWidthLabel) {
-                    borderWidthLabel.textContent = `${borderWidthSlider.value}%`;
-                }
+            placeholder.addEventListener('dragleave', (e) => {
+                e.currentTarget.classList.remove('drag-over');
             });
         }
-        
-        // 装饰缩放滑动条
-        const decorationScaleSlider = document.getElementById('decoration-scale-slider');
-        const decorationScaleLabel = document.getElementById('decoration-scale-label');
-        
-        if (decorationScaleSlider) {
-            decorationScaleSlider.addEventListener('input', () => {
-                const scale = parseFloat(decorationScaleSlider.value);
-                const state = editorState.getState();
-                
-                if (state.selectedDecorationId) {
-                    editorState.updateDecoration(state.selectedDecorationId, { scale });
-                }
-                
-                if (decorationScaleLabel) {
-                    decorationScaleLabel.textContent = `${Math.round(scale * 100)}%`;
-                }
-            });
-        }
-        
-        // 装饰旋转滑动条
-        const decorationRotationSlider = document.getElementById('decoration-rotation-slider');
-        const decorationRotationLabel = document.getElementById('decoration-rotation-label');
-        
-        if (decorationRotationSlider) {
-            decorationRotationSlider.addEventListener('input', () => {
-                const rotation = parseFloat(decorationRotationSlider.value);
-                const state = editorState.getState();
-                
-                if (state.selectedDecorationId) {
-                    editorState.updateDecoration(state.selectedDecorationId, { rotation });
-                }
-                
-                if (decorationRotationLabel) {
-                    decorationRotationLabel.textContent = `${rotation}°`;
-                }
-            });
-        }
-        
-        // 删除装饰按钮
-        const deleteBtn = document.getElementById('delete-decoration-btn');
-        if (deleteBtn) {
-            deleteBtn.addEventListener('click', () => {
-                const state = editorState.getState();
-                if (state.selectedDecorationId) {
-                    editorState.removeDecoration(state.selectedDecorationId);
-                }
-            });
-        }
-        
-        // 复制到剪贴板按钮
-        const copyBtn = document.getElementById('copy-to-clipboard-btn');
-        if (copyBtn) {
-            copyBtn.addEventListener('click', async () => {
-                try {
-                    await this.canvasEditor.copyToClipboard();
-                    alert('已成功复制到剪贴板！');
-                } catch (error) {
-                    console.error('复制失败:', error);
-                    alert('复制失败，请重试。');
-                }
-            });
-        }
-    }
-    
-    setupStateListeners() {
-        editorState.addListener(this.onStateChange.bind(this));
-    }
-    
-    onStateChange(state) {
-        this.updateControlsVisibility(state);
-        this.updateSliderValues(state);
-    }
-    
-    updateControlsVisibility(state) {
-        const borderControls = document.getElementById('border-controls');
-        const decorationControls = document.getElementById('decoration-controls');
-        const saveOptions = document.getElementById('save-options');
-        
-        // 隐藏所有控件
-        [borderControls, decorationControls, saveOptions].forEach(control => {
-            if (control) control.classList.remove('visible');
-        });
-        
-        // 根据模式显示对应控件
-        switch (state.currentMode) {
-            case 'frame':
-                if (borderControls && state.border.isActive) {
-                    borderControls.classList.add('visible');
-                }
-                break;
-            case 'decoration':
-                if (decorationControls && state.selectedDecorationId) {
-                    decorationControls.classList.add('visible');
-                }
-                break;
-            case 'save':
-                if (saveOptions) {
-                    saveOptions.classList.add('visible');
-                }
-                break;
-        }
-    }
-    
-    updateSliderValues(state) {
-        // 更新边框宽度滑动条
-        const borderWidthSlider = document.getElementById('border-width-slider');
-        const borderWidthLabel = document.getElementById('border-width-label');
-        
-        if (borderWidthSlider && state.border.isActive) {
-            const value = Math.round(state.border.widthRatio * 100);
-            borderWidthSlider.value = value;
-            if (borderWidthLabel) {
-                borderWidthLabel.textContent = `${value}%`;
-            }
-        }
-        
-        // 更新装饰控制滑动条
-        if (state.selectedDecorationId) {
-            const decoration = state.decorations.find(d => d.id === state.selectedDecorationId);
-            if (decoration) {
-                const scaleSlider = document.getElementById('decoration-scale-slider');
-                const scaleLabel = document.getElementById('decoration-scale-label');
-                const rotationSlider = document.getElementById('decoration-rotation-slider');
-                const rotationLabel = document.getElementById('decoration-rotation-label');
-                
-                if (scaleSlider) {
-                    scaleSlider.value = decoration.scale;
-                    if (scaleLabel) {
-                        scaleLabel.textContent = `${Math.round(decoration.scale * 100)}%`;
-                    }
-                }
-                
-                if (rotationSlider) {
-                    rotationSlider.value = decoration.rotation;
-                    if (rotationLabel) {
-                        rotationLabel.textContent = `${decoration.rotation}°`;
-                    }
-                }
-            }
-        }
-    }
-    
-    switchMode(mode) {
-        // 更新导航按钮状态
-        const navButtons = document.querySelectorAll('.nav-button');
-        navButtons.forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.mode === mode);
-        });
-        
-        // 更新素材栏显示
-        const assetsViews = document.querySelectorAll('.assets-view');
-        assetsViews.forEach(view => {
-            view.classList.toggle('active', view.id === `assets-${mode}`);
-        });
-        
-        // 更新状态
-        editorState.setMode(mode);
     }
     
     openFileDialog() {
@@ -984,13 +801,23 @@ class AppManager {
         input.click();
     }
     
+    async loadImageFromSrc(src) {
+        try {
+            const img = await Utils.loadImage(src);
+            editorState.updateImage(img, img.naturalWidth, img.naturalHeight);
+        } catch (error) {
+            console.error('加载图片失败:', error);
+            alert('加载图片失败，请重试');
+        }
+    }
+    
     async loadImageFile(file) {
         try {
             const src = URL.createObjectURL(file);
-            await this.canvasEditor.loadImage(src);
+            await this.loadImageFromSrc(src);
         } catch (error) {
-            console.error('加载图片失败:', error);
-            alert('加载图片失败，请重试。');
+            console.error('加载图片文件失败:', error);
+            alert('加载图片文件失败，请重试');
         }
     }
     
@@ -999,28 +826,302 @@ class AppManager {
         e.currentTarget.classList.add('drag-over');
     }
     
-    handleDragLeave(e) {
-        e.currentTarget.classList.remove('drag-over');
-    }
-    
     handleDrop(e) {
         e.preventDefault();
         e.currentTarget.classList.remove('drag-over');
         
         const files = e.dataTransfer.files;
-        if (files.length > 0 && files[0].type.startsWith('image/')) {
+        if (files.length > 0) {
             this.loadImageFile(files[0]);
         }
     }
 }
 
-// ===== 初始化应用 =====
+// ===== 边框管理器 =====
+class BorderManager {
+    constructor() {
+        this.setupEventListeners();
+    }
+    
+    setupEventListeners() {
+        // 边框素材点击事件
+        const borderAssets = document.querySelectorAll('.frame-asset-item');
+        borderAssets.forEach(asset => {
+            asset.addEventListener('click', () => {
+                const borderId = asset.dataset.borderId;
+                if (borderId) {
+                    this.loadBorder(borderId);
+                }
+            });
+        });
+        
+        // 边框宽度滑块
+        const borderWidthSlider = document.getElementById('border-width-slider');
+        const borderWidthLabel = document.getElementById('border-width-label');
+        
+        if (borderWidthSlider && borderWidthLabel) {
+            borderWidthSlider.addEventListener('input', (e) => {
+                const ratio = parseFloat(e.target.value) / 100;
+                editorState.updateBorder(
+                    editorState.getState().border.id,
+                    editorState.getState().border.settings,
+                    editorState.getState().border.image,
+                    ratio
+                );
+                borderWidthLabel.textContent = `${e.target.value}%`;
+            });
+        }
+    }
+    
+    async loadBorder(borderId) {
+        try {
+            // 加载边框配置
+            const settings = await Utils.loadJson(`assets/frames/${borderId}/settings.json`);
+            if (!settings) {
+                throw new Error('无法加载边框配置');
+            }
+            
+            // 加载边框图片
+            const borderImage = await Utils.loadImage(`assets/frames/${borderId}/frame.png`);
+            
+            editorState.updateBorder(borderId, settings, borderImage);
+            
+            // 更新UI状态
+            this.updateBorderAssetSelection(borderId);
+            
+        } catch (error) {
+            console.error('加载边框失败:', error);
+            alert('加载边框失败，请重试');
+        }
+    }
+    
+    updateBorderAssetSelection(borderId) {
+        // 移除所有选中状态
+        document.querySelectorAll('.frame-asset-item').forEach(item => {
+            item.classList.remove('active-asset');
+        });
+        
+        // 添加当前选中状态
+        const selectedAsset = document.querySelector(`[data-border-id="${borderId}"]`);
+        if (selectedAsset) {
+            selectedAsset.classList.add('active-asset');
+        }
+    }
+}
+
+// ===== 装饰管理器 =====
+class DecorationManager {
+    constructor() {
+        this.setupEventListeners();
+    }
+    
+    setupEventListeners() {
+        // 装饰素材点击事件
+        const decorationAssets = document.querySelectorAll('.decoration-asset-item');
+        decorationAssets.forEach(asset => {
+            asset.addEventListener('click', () => {
+                const decorationId = asset.dataset.decorationId;
+                if (decorationId) {
+                    this.addDecoration(decorationId);
+                }
+            });
+        });
+        
+        // 装饰控制滑块
+        const scaleSlider = document.getElementById('decoration-scale-slider');
+        const scaleLabel = document.getElementById('decoration-scale-label');
+        const rotationSlider = document.getElementById('decoration-rotation-slider');
+        const rotationLabel = document.getElementById('decoration-rotation-label');
+        const deleteBtn = document.getElementById('delete-decoration-btn');
+        
+        if (scaleSlider && scaleLabel) {
+            scaleSlider.addEventListener('input', (e) => {
+                const scale = parseFloat(e.target.value);
+                const selectedId = editorState.getState().selectedDecorationId;
+                if (selectedId) {
+                    editorState.updateDecoration(selectedId, { scale });
+                    scaleLabel.textContent = `${Math.round(scale * 100)}%`;
+                }
+            });
+        }
+        
+        if (rotationSlider && rotationLabel) {
+            rotationSlider.addEventListener('input', (e) => {
+                const rotation = parseFloat(e.target.value);
+                const selectedId = editorState.getState().selectedDecorationId;
+                if (selectedId) {
+                    editorState.updateDecoration(selectedId, { rotation });
+                    rotationLabel.textContent = `${rotation}°`;
+                }
+            });
+        }
+        
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => {
+                const selectedId = editorState.getState().selectedDecorationId;
+                if (selectedId) {
+                    editorState.removeDecoration(selectedId);
+                }
+            });
+        }
+        
+        // 监听状态变化以更新控件
+        editorState.addListener(this.onStateChange.bind(this));
+    }
+    
+    async addDecoration(decorationId) {
+        try {
+            // 加载装饰图片
+            const decorationImage = await Utils.loadImage(`assets/decos/${decorationId}/deco.png`);
+            
+            // 计算默认尺寸（图片最小边的1/10）
+            const state = editorState.getState();
+            const minDim = state.image.minDimension || 500;
+            const defaultScale = 0.1;
+            const originalSize = minDim * defaultScale;
+            
+            editorState.addDecoration({
+                decorationId,
+                image: decorationImage,
+                originalSize,
+                defaultScale
+            });
+            
+        } catch (error) {
+            console.error('加载装饰失败:', error);
+            alert('加载装饰失败，请重试');
+        }
+    }
+    
+    onStateChange(state) {
+        const { selectedDecorationId, decorations } = state;
+        const selectedDecoration = decorations.find(d => d.id === selectedDecorationId);
+        
+        // 更新控件值
+        const scaleSlider = document.getElementById('decoration-scale-slider');
+        const scaleLabel = document.getElementById('decoration-scale-label');
+        const rotationSlider = document.getElementById('decoration-rotation-slider');
+        const rotationLabel = document.getElementById('decoration-rotation-label');
+        
+        if (selectedDecoration) {
+            if (scaleSlider) {
+                scaleSlider.value = selectedDecoration.scale;
+                scaleLabel.textContent = `${Math.round(selectedDecoration.scale * 100)}%`;
+            }
+            if (rotationSlider) {
+                rotationSlider.value = selectedDecoration.rotation;
+                rotationLabel.textContent = `${selectedDecoration.rotation}°`;
+            }
+        }
+    }
+}
+
+// ===== 模式管理器 =====
+class ModeManager {
+    constructor() {
+        this.setupEventListeners();
+    }
+    
+    setupEventListeners() {
+        // 导航按钮点击事件
+        const navButtons = document.querySelectorAll('.nav-button');
+        navButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const mode = button.dataset.mode;
+                this.switchMode(mode);
+            });
+        });
+        
+        // 监听状态变化
+        editorState.addListener(this.onStateChange.bind(this));
+    }
+    
+    switchMode(mode) {
+        editorState.setMode(mode);
+        this.updateNavigation(mode);
+        this.updateAssets(mode);
+        this.updateControls(mode);
+    }
+    
+    updateNavigation(mode) {
+        // 更新导航按钮状态
+        document.querySelectorAll('.nav-button').forEach(button => {
+            button.classList.remove('active');
+        });
+        
+        const activeButton = document.querySelector(`[data-mode="${mode}"]`);
+        if (activeButton) {
+            activeButton.classList.add('active');
+        }
+    }
+    
+    updateAssets(mode) {
+        // 更新底部素材栏
+        document.querySelectorAll('.assets-view').forEach(view => {
+            view.classList.remove('active');
+        });
+        
+        const activeAssets = document.getElementById(`assets-${mode}`);
+        if (activeAssets) {
+            activeAssets.classList.add('active');
+        }
+    }
+    
+    updateControls(mode) {
+        // 更新控件显示
+        const borderControls = document.getElementById('border-controls');
+        const decorationControls = document.getElementById('decoration-controls');
+        const saveOptions = document.getElementById('save-options');
+        
+        // 隐藏所有控件
+        [borderControls, decorationControls, saveOptions].forEach(control => {
+            if (control) control.classList.remove('visible');
+        });
+        
+        // 显示对应模式的控件
+        switch (mode) {
+            case 'frame':
+                if (borderControls) borderControls.classList.add('visible');
+                break;
+            case 'decoration':
+                if (decorationControls) decorationControls.classList.add('visible');
+                break;
+            case 'save':
+                if (saveOptions) saveOptions.classList.add('visible');
+                break;
+        }
+    }
+    
+    onStateChange(state) {
+        // 根据状态变化调整界面
+        if (state.currentMode) {
+            this.updateControls(state.currentMode);
+        }
+    }
+}
+
+// ===== 全局实例初始化 =====
+let editorState, canvasEditor, imageManager, borderManager, decorationManager, modeManager;
+
 document.addEventListener('DOMContentLoaded', function() {
-    // 创建全局状态实例
-    window.editorState = new EditorState();
+    // 初始化全局状态
+    editorState = new EditorState();
     
-    // 创建应用管理器
-    window.appManager = new AppManager();
+    // 初始化各个管理器
+    canvasEditor = new CanvasEditor();
+    imageManager = new ImageManager();
+    borderManager = new BorderManager();
+    decorationManager = new DecorationManager();
+    modeManager = new ModeManager();
     
-    console.log('喵妙框应用已初始化');
+    console.log('🎉 喵妙框Canvas统一架构初始化完成');
+    
+    // 调试功能：全局访问
+    window.editorDebug = {
+        state: editorState,
+        canvas: canvasEditor,
+        enableDebug: () => editorState.enableDebug(),
+        disableDebug: () => editorState.disableDebug(),
+        getDebugInfo: () => editorState.getDebugInfo()
+    };
 });
